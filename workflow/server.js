@@ -15,7 +15,9 @@ const MAX_BODY_BYTES = 80 * 1024 * 1024;
 const SERVICE_NAME = "Xray workflow service";
 const HTML_PATH = path.resolve(__dirname, "../xray-md-evidence.html");
 const ROOT_DIR = path.resolve(__dirname, "..");
+const FINAL_RUN_STATUSES = new Set(["success", "partial", "failed", "cancelled"]);
 const runs = new Map();
+const runControls = new Map();
 
 function corsHeaders() {
   return {
@@ -166,6 +168,10 @@ function createRun(payload) {
     updatedAt: new Date().toISOString(),
   };
   runs.set(runId, run);
+  runControls.set(runId, {
+    controller: new AbortController(),
+    browser: null,
+  });
   return run;
 }
 
@@ -188,16 +194,60 @@ function updateRun(runId, patch) {
   Object.assign(run, patch, { updatedAt: new Date().toISOString() });
 }
 
-function startRun(runId, payload) {
+function isWorkflowCancelledError(error) {
+  return error?.code === "XRAY_WORKFLOW_CANCELLED";
+}
+
+function markRunCancelled(runId, message = "Workflow cancelled.") {
+  const run = runs.get(runId);
+  if (run?.status === "cancelled") return;
+  appendRunLog(runId, {
+    level: "warn",
+    testcaseName: "",
+    message,
+  });
+  updateRun(runId, {
+    status: "cancelled",
+    message,
+    results: [],
+  });
+}
+
+function startRun(runId, payload, state = {}) {
   setImmediate(async () => {
+    const control = runControls.get(runId);
+    if (control?.controller.signal.aborted) {
+      markRunCancelled(runId);
+      runControls.delete(runId);
+      return;
+    }
     updateRun(runId, { status: "running", message: "Starting Playwright." });
+    const workflowRunner = state.workflowRunner || runXrayWorkflow;
     try {
-      const result = await runXrayWorkflow(payload, (status, message, logEntry) => {
-        if (logEntry) appendRunLog(runId, logEntry);
-        updateRun(runId, { status, message });
-      });
+      const result = await workflowRunner(
+        payload,
+        (status, message, logEntry) => {
+          if (control?.controller.signal.aborted) return;
+          if (logEntry) appendRunLog(runId, logEntry);
+          updateRun(runId, { status, message });
+        },
+        {
+          signal: control?.controller.signal,
+          onBrowser: (browser) => {
+            if (control) control.browser = browser;
+          },
+        },
+      );
+      if (control?.controller.signal.aborted) {
+        markRunCancelled(runId);
+        return;
+      }
       updateRun(runId, result);
     } catch (error) {
+      if (isWorkflowCancelledError(error) || control?.controller.signal.aborted) {
+        markRunCancelled(runId);
+        return;
+      }
       appendRunLog(runId, {
         level: "error",
         testcaseName: "",
@@ -208,8 +258,24 @@ function startRun(runId, payload) {
         message: error.message || "Workflow failed.",
         results: [],
       });
+    } finally {
+      runControls.delete(runId);
     }
   });
+}
+
+async function cancelRun(runId) {
+  const run = runs.get(runId);
+  if (!run) return null;
+  if (FINAL_RUN_STATUSES.has(run.status)) return run;
+
+  const control = runControls.get(runId);
+  markRunCancelled(runId);
+  if (control) {
+    control.controller.abort();
+    await control.browser?.close().catch(() => {});
+  }
+  return runs.get(runId);
 }
 
 async function handleRequest(req, res, state = { port: PORT, host: HOST }) {
@@ -259,7 +325,7 @@ async function handleRequest(req, res, state = { port: PORT, host: HOST }) {
     try {
       const payload = validateWorkflowPayload(await readJsonBody(req));
       const run = createRun(payload);
-      startRun(run.runId, payload);
+      startRun(run.runId, payload, state);
       sendJson(res, 202, {
         runId: run.runId,
         status: run.status,
@@ -268,6 +334,17 @@ async function handleRequest(req, res, state = { port: PORT, host: HOST }) {
     } catch (error) {
       sendJson(res, 400, { error: error.message });
     }
+    return;
+  }
+
+  const cancelMatch = url.pathname.match(/^\/workflow\/([^/]+)\/cancel$/);
+  if (req.method === "POST" && cancelMatch) {
+    const run = await cancelRun(decodeURIComponent(cancelMatch[1]));
+    if (!run) {
+      sendJson(res, 404, { error: "Workflow run was not found." });
+      return;
+    }
+    sendJson(res, 200, run);
     return;
   }
 
@@ -422,6 +499,7 @@ module.exports = {
   checkExistingWorkflowService,
   createServer,
   isWorkflowServiceHealth,
+  cancelRun,
   startSetupTerminal,
   startWorkflowServer,
   validateWorkflowPayload,

@@ -8,7 +8,9 @@
       {
         "ignore": [
           "backdrop-filter",
-          "min-height: auto"
+          "min-height: auto",
+          "border-color: color-mix(in srgb, var(--accent) 76%, #000)",
+          "border: 1px solid color-mix(in srgb, var(--success) 36%, transparent)"
         ]
       }
     ],

@@ -252,6 +252,114 @@ test("uploaded in Xray checkbox defaults unchecked, persists, and filters cards"
   }
 });
 
+test("testcase Save pushes to Gist without confirmation", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let confirmCalls = 0;
+  let gistPatchCount = 0;
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "Upload evidence" }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1-gist",
+        JSON.stringify({
+          username: "octocat",
+          token: "token-1",
+          gistId: "gist-1",
+        }),
+      );
+      window.confirm = () => {
+        window.__confirmCalls = (window.__confirmCalls || 0) + 1;
+        return true;
+      };
+    });
+    await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "PATCH") {
+        gistPatchCount += 1;
+        await route.fulfill({ json: { id: "gist-1" } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(htmlUrl);
+    const saveButton = page.locator(
+      'button[data-action="save-to-gist"][data-tc="TC-001"]',
+    );
+    await assert.doesNotReject(saveButton.waitFor());
+    const copySeparatelyBox = await page
+      .locator('button[data-action="copy-separately"][data-tc="TC-001"]')
+      .boundingBox();
+    const saveBox = await saveButton.boundingBox();
+    assert.ok(copySeparatelyBox);
+    assert.ok(saveBox);
+    assert.ok(saveBox.width >= copySeparatelyBox.width);
+    assert.ok(saveBox.height >= copySeparatelyBox.height);
+    await saveButton.click();
+    await page.locator(".toast", { hasText: "Pushed 1 workspace(s) to Gist" }).waitFor();
+
+    confirmCalls = await page.evaluate(() => window.__confirmCalls || 0);
+    assert.equal(confirmCalls, 0);
+    assert.equal(gistPatchCount, 1);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("settings Push to Gist keeps the existing confirmation", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let gistPatchCount = 0;
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "Upload evidence" }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1-gist",
+        JSON.stringify({
+          username: "octocat",
+          token: "token-1",
+          gistId: "gist-1",
+        }),
+      );
+      window.__confirmCalls = 0;
+      window.confirm = () => {
+        window.__confirmCalls += 1;
+        return true;
+      };
+    });
+    await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "PATCH") {
+        gistPatchCount += 1;
+        await route.fulfill({ json: { id: "gist-1" } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.locator("#pushGistBtn").click();
+    await page.locator(".toast", { hasText: "Pushed 1 workspace(s) to Gist" }).waitFor();
+
+    assert.equal(await page.evaluate(() => window.__confirmCalls), 1);
+    assert.equal(gistPatchCount, 1);
+  } finally {
+    await browser.close();
+  }
+});
+
 test("workflow result marks uploaded only after a successful matching result", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
@@ -321,6 +429,267 @@ test("workflow result marks uploaded only after a successful matching result", a
         .isChecked(),
       false,
     );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("workflow result marks failed local testcase uploaded when matching item upload succeeds", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Failed evidence with uploaded result",
+          status: "fail",
+          xrayUploaded: false,
+        }),
+      ]),
+    );
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        await route.fulfill({
+          json: { runId: "run-partial", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-partial",
+          status: "partial",
+          message: "Workflow finished with failures.",
+          payloadSummary: { itemCount: 2, browserMode: "headless" },
+          logs: [],
+          results: [
+            {
+              testcaseName: "Failed evidence with uploaded result",
+              localStatus: "fail",
+              status: "success",
+            },
+            {
+              testcaseName: "Another testcase",
+              localStatus: "pass",
+              status: "failed",
+            },
+          ],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="start-workflow"][data-tc="TC-001"]')
+      .click();
+    await page.waitForFunction(() =>
+      document.querySelector('input[data-action="xray-uploaded"][data-tc="TC-001"]')
+        ?.checked,
+    );
+
+    await assert.equal(
+      await page
+        .locator('input[data-action="xray-uploaded"][data-tc="TC-001"]')
+        .isChecked(),
+      true,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("saving workflow settings refreshes visible values and marks workspace modified", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    const workspace = workspaceWithUploadedCases([
+      testCaseFixture({ id: "TC-001", title: "Upload evidence" }),
+    ]);
+    workspace.workspaces[0].remoteStatus = "synced";
+    workspace.workspaces[0].remoteSyncedAt = "2026-05-19T00:02:00.000Z";
+    await seedWorkspace(page, workspace);
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.locator("#workflowSummarySetting").fill("NS-2 Updated Execution");
+    await page
+      .locator('input[name="workflowBrowserModeSetting"][value="headed"]')
+      .check();
+    await page.locator("#saveWorkflowSettingsBtn").click();
+
+    await assert.doesNotReject(
+      page.getByText("NS-2 Updated Execution").waitFor(),
+    );
+    await assert.doesNotReject(
+      page
+        .locator(".project-item.active .sync-chip", { hasText: "Modified" })
+        .waitFor(),
+    );
+    await assert.equal(
+      await page
+        .locator('[data-workflow-panel="TC-001"] .workflow-mode-options')
+        .textContent(),
+      "Browser mode: headed",
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("testcase Cancel Workflow cancels the active run", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let cancelCount = 0;
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "Upload evidence" }),
+      ]),
+    );
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        await route.fulfill({
+          json: { runId: "run-cancel", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      if (url.pathname === "/workflow/run-cancel/cancel") {
+        cancelCount += 1;
+        await route.fulfill({
+          json: {
+            runId: "run-cancel",
+            status: "cancelled",
+            message: "Workflow cancelled.",
+            payloadSummary: { itemCount: 1, browserMode: "headless" },
+            logs: [{ time: new Date().toISOString(), level: "warn", message: "Workflow cancelled." }],
+            results: [],
+          },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-cancel",
+          status: "running",
+          message: "Workflow running.",
+          payloadSummary: { itemCount: 1, browserMode: "headless" },
+          logs: [],
+          results: [],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="start-workflow"][data-tc="TC-001"]')
+      .click();
+    const cancelButton = page.locator(
+      'button[data-action="cancel-workflow"][data-tc="TC-001"]',
+    );
+    await cancelButton.waitFor();
+    await cancelButton.click();
+    await page.locator(".workflow-run-title", { hasText: "Workflow cancelled" }).waitFor();
+
+    assert.equal(cancelCount, 1);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("workbench Cancel Workflow stops the queue before starting the next testcase", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let startCount = 0;
+  let cancelCount = 0;
+  let cancelled = false;
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "First evidence" }),
+        testCaseFixture({ id: "TC-002", title: "Second evidence" }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        startCount += 1;
+        await route.fulfill({
+          json: { runId: "run-queue", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      if (url.pathname === "/workflow/run-queue/cancel") {
+        cancelCount += 1;
+        cancelled = true;
+        await route.fulfill({
+          json: {
+            runId: "run-queue",
+            status: "cancelled",
+            message: "Workflow cancelled.",
+            payloadSummary: { itemCount: 1, browserMode: "headless" },
+            logs: [{ time: new Date().toISOString(), level: "warn", message: "Workflow cancelled." }],
+            results: [],
+          },
+        });
+        return;
+      }
+      if (cancelled) {
+        await route.fulfill({
+          json: {
+            runId: "run-queue",
+            status: "cancelled",
+            message: "Workflow cancelled.",
+            payloadSummary: { itemCount: 1, browserMode: "headless" },
+            logs: [{ time: new Date().toISOString(), level: "warn", message: "Workflow cancelled." }],
+            results: [],
+          },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-queue",
+          status: "running",
+          message: "Workflow running.",
+          payloadSummary: { itemCount: 1, browserMode: "headless" },
+          logs: [],
+          results: [],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+    await page.waitForFunction(() => !document.querySelector("#cancelWorkspaceWorkflowBtn")?.disabled);
+    await page.locator("#cancelWorkspaceWorkflowBtn").click();
+    await page.locator(".toast", { hasText: "Workflow queue cancelled" }).waitFor();
+
+    assert.equal(cancelCount, 1);
+    assert.equal(startCount, 1);
   } finally {
     await browser.close();
   }
