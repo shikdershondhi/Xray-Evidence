@@ -1,0 +1,4865 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xray Markdown Evidence Builder</title>
+    <style>
+      :root {
+        font-size: 100%;
+        --bg: #eef2f6;
+        --panel: #ffffff;
+        --panel-2: #f8fafc;
+        --panel-rgb: 255, 255, 255;
+        --header-bg: rgba(248, 250, 252, 0.96);
+        --field-bg: #ffffff;
+        --field-muted-bg: #f8fafc;
+        --ink: #172033;
+        --ink-soft: #253044;
+        --muted: #667085;
+        --line: #d9e2ec;
+        --blue: #1f66d1;
+        --blue-dark: #164ea4;
+        --green: #16803c;
+        --red: #c52222;
+        --amber: #9a6400;
+        --secondary: #334155;
+        --secondary-hover: #1f2937;
+        --warning-bg: #f3b33d;
+        --warning-ink: #1f2937;
+        --grid-line: rgba(31, 102, 209, 0.05);
+        --hover-panel: #f1f5f9;
+        --active-panel: #eef5ff;
+        --success-bg: #eefbf1;
+        --success-ink: #14532d;
+        --success-line: #9bd3a8;
+        --fail-bg: #fff1f1;
+        --fail-ink: #7f1d1d;
+        --fail-line: #f0a0a0;
+        --modified-bg: #fff7ed;
+        --modified-ink: #854d0e;
+        --modified-line: #f3c37a;
+        --notice-bg: #eef6ff;
+        --notice-ink: #173f75;
+        --notice-line: #b9d4fb;
+        --drop-bg: #f7fbff;
+        --drop-active-bg: #eaf3ff;
+        --image-bg: #f1f5f9;
+        --badge-bg: #172033;
+        --shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+        --radius: 8px;
+      }
+
+      body[data-theme="dark"] {
+        --bg: #0f172a;
+        --panel: #182235;
+        --panel-2: #111c2f;
+        --panel-rgb: 24, 34, 53;
+        --header-bg: rgba(15, 23, 42, 0.96);
+        --field-bg: #0f172a;
+        --field-muted-bg: #111c2f;
+        --ink: #edf3ff;
+        --ink-soft: #dbe7f7;
+        --muted: #a8b5c7;
+        --line: #34445c;
+        --blue: #4e8df5;
+        --blue-dark: #2d6dde;
+        --green: #20a85a;
+        --red: #d64b4b;
+        --amber: #d8a136;
+        --secondary: #4b5f78;
+        --secondary-hover: #647990;
+        --warning-bg: #d8a136;
+        --warning-ink: #111827;
+        --grid-line: rgba(78, 141, 245, 0.08);
+        --hover-panel: #233249;
+        --active-panel: #17345e;
+        --success-bg: #123824;
+        --success-ink: #b6f2cb;
+        --success-line: #2f8a56;
+        --fail-bg: #431c24;
+        --fail-ink: #ffc4c4;
+        --fail-line: #944450;
+        --modified-bg: #3c2a12;
+        --modified-ink: #ffd996;
+        --modified-line: #8f671e;
+        --notice-bg: #132a49;
+        --notice-ink: #cbe0ff;
+        --notice-line: #315b8f;
+        --drop-bg: #13243b;
+        --drop-active-bg: #17345e;
+        --image-bg: #0b1220;
+        --badge-bg: #dbeafe;
+        --shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+          linear-gradient(var(--grid-line) 1px, transparent 1px),
+          var(--bg);
+        background-size: 28px 28px;
+        color: var(--ink);
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        border-bottom: 1px solid var(--line);
+        background: var(--header-bg);
+        backdrop-filter: blur(12px);
+      }
+
+      .topbar {
+        max-width: 1440px;
+        margin: 0 auto;
+        padding: 12px 174px 12px 18px;
+      }
+
+      .title-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 14px;
+        align-items: baseline;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 23px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      .author-credit {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      .sub {
+        max-width: 980px;
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .blue-link {
+        color: var(--blue);
+      }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: minmax(260px, 1fr) minmax(150px, 210px);
+        gap: 10px;
+        align-items: center;
+        margin-top: 10px;
+      }
+
+      input,
+      select,
+      button {
+        min-height: 40px;
+        font: inherit;
+      }
+
+      input[type="file"],
+      input[type="search"],
+      input[type="text"],
+      input[type="password"],
+      select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--field-bg);
+        color: var(--ink);
+        padding: 9px 11px;
+        font-size: 14px;
+      }
+
+      input[readonly] {
+        background: var(--field-muted-bg);
+        color: var(--muted);
+      }
+
+      button {
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        padding: 9px 12px;
+        background: var(--blue);
+        color: #fff;
+        font-weight: 650;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      button:hover {
+        background: var(--blue-dark);
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      .dropzone:focus-visible {
+        outline: 3px solid rgba(31, 102, 209, 0.28);
+        outline-offset: 2px;
+      }
+
+      button.secondary {
+        background: var(--secondary);
+      }
+      button.secondary:hover {
+        background: var(--secondary-hover);
+      }
+      button.danger {
+        background: var(--red);
+      }
+      button.success {
+        background: var(--green);
+      }
+      button.warning {
+        background: var(--warning-bg);
+        color: var(--warning-ink);
+      }
+      button.ghost {
+        border-color: var(--line);
+        background: var(--field-bg);
+        color: var(--ink);
+      }
+      button.ghost:hover {
+        background: var(--hover-panel);
+      }
+      button.small {
+        min-height: 32px;
+        padding: 6px 9px;
+        font-size: 12px;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .theme-toggle {
+        position: fixed;
+        top: 12px;
+        right: 18px;
+        z-index: 40;
+        display: inline-flex;
+        width: 44px;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        border-color: var(--line);
+        background: var(--field-bg);
+        color: var(--ink);
+        padding: 0;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14);
+      }
+
+      .theme-toggle:hover {
+        background: var(--hover-panel);
+      }
+
+      .theme-toggle svg {
+        width: 22px;
+        height: 22px;
+        pointer-events: none;
+      }
+
+      .help-toggle {
+        right: 70px;
+      }
+
+      .settings-toggle {
+        right: 122px;
+      }
+
+      .settings-drawer {
+        position: fixed;
+        inset: 0;
+        z-index: 85;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+      }
+
+      .settings-backdrop {
+        background: rgba(15, 23, 42, 0.42);
+      }
+
+      .settings-panel {
+        display: flex;
+        height: 100vh;
+        height: 100dvh;
+        min-width: 0;
+        min-height: 0;
+        flex-direction: column;
+        border-left: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        box-shadow: -18px 0 48px rgba(15, 23, 42, 0.22);
+      }
+
+      .settings-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel-2);
+        padding: 14px 16px;
+      }
+
+      .settings-head h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .settings-body {
+        display: grid;
+        flex: 1;
+        gap: 18px;
+        min-height: 0;
+        overflow: auto;
+        overscroll-behavior: contain;
+        padding: 16px;
+      }
+
+      .settings-section {
+        display: grid;
+        gap: 10px;
+        border-top: 1px solid var(--line);
+        padding-top: 14px;
+      }
+
+      .settings-section:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .settings-section h3 {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .settings-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .settings-help {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .workflow-status {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel-2);
+        color: var(--ink-soft);
+        padding: 9px 10px;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .workflow-status.success {
+        border-color: var(--success-line);
+        background: var(--success-bg);
+        color: var(--success-ink);
+      }
+
+      .workflow-status.error {
+        border-color: var(--fail-line);
+        background: var(--fail-bg);
+        color: var(--fail-ink);
+      }
+
+      .workflow-status.running {
+        border-color: var(--notice-line);
+        background: var(--notice-bg);
+        color: var(--notice-ink);
+      }
+
+      .workflow-mode-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .workflow-mode-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-2);
+        padding: 7px 9px;
+        font-size: 13px;
+      }
+
+      .workflow-workbench-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .tc-workflow-panel {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel-2);
+        padding: 10px 11px;
+      }
+
+      .tc-workflow-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .tc-workflow-title {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .tc-workflow-grid {
+        display: grid;
+        grid-template-columns: minmax(240px, 1fr) auto auto;
+        gap: 10px;
+        align-items: end;
+      }
+
+      .workflow-summary-label {
+        display: grid;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 750;
+        text-transform: uppercase;
+      }
+
+      .workflow-run-popup {
+        display: none;
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+        overflow: hidden;
+      }
+
+      .workflow-run-popup.visible {
+        display: block;
+      }
+
+      .workflow-run-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px;
+      }
+
+      .workflow-spinner {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 auto;
+        border: 2px solid var(--line);
+        border-top-color: var(--blue);
+        border-radius: 50%;
+        margin-top: 1px;
+        animation: workflow-spin 0.8s linear infinite;
+      }
+
+      .workflow-run-popup.final .workflow-spinner {
+        display: none;
+      }
+
+      .workflow-run-popup.failed .workflow-spinner,
+      .workflow-run-popup.partial .workflow-spinner {
+        display: none;
+      }
+
+      .workflow-run-main {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .workflow-run-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      .workflow-run-meta,
+      .workflow-run-latest {
+        margin-top: 3px;
+        font-size: 12px;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+
+      .workflow-log-toggle {
+        border-top: 1px solid var(--line);
+        border-radius: 0;
+        width: 100%;
+        justify-content: flex-start;
+        background: var(--panel-2);
+      }
+
+      .workflow-log-list {
+        display: none;
+        max-height: 220px;
+        overflow: auto;
+        border-top: 1px solid var(--line);
+        padding: 6px 10px 10px;
+      }
+
+      .workflow-run-popup.expanded .workflow-log-list {
+        display: block;
+      }
+
+      .workflow-log-entry {
+        padding: 6px 0;
+        border-bottom: 1px solid var(--line);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .workflow-log-entry:last-child {
+        border-bottom: 0;
+      }
+
+      .workflow-log-entry.error {
+        color: var(--fail-ink);
+      }
+
+      .workflow-log-entry.warn {
+        color: var(--notice-ink);
+      }
+
+      .workflow-log-time {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      @keyframes workflow-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .help-dialog {
+        position: fixed;
+        inset: 0;
+        z-index: 90;
+        display: grid;
+        place-items: start center;
+        overflow: auto;
+        background: rgba(15, 23, 42, 0.5);
+        padding: 72px 18px 28px;
+      }
+
+      .help-panel {
+        width: min(860px, 100%);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        color: var(--ink);
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.3);
+      }
+
+      .help-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel-2);
+        padding: 14px 16px;
+      }
+
+      .help-head h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .help-content {
+        display: grid;
+        gap: 14px;
+        max-height: min(72vh, 760px);
+        overflow: auto;
+        padding: 16px;
+        line-height: 1.55;
+      }
+
+      .help-section {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel-2);
+        padding: 13px 14px;
+      }
+
+      .help-section h3 {
+        margin: 0 0 8px;
+        font-size: 15px;
+      }
+
+      .help-section p,
+      .help-section ol,
+      .help-section ul {
+        margin: 0;
+      }
+
+      .help-section ol,
+      .help-section ul {
+        padding-left: 20px;
+      }
+
+      .help-section li + li {
+        margin-top: 5px;
+      }
+
+      .help-section code {
+        border-radius: 3px;
+        background: var(--hover-panel);
+        padding: 2px 4px;
+      }
+
+      main {
+        max-width: 1440px;
+        margin: 0 auto;
+        padding: 18px 22px 34px;
+      }
+
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .stat {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        padding: 11px 12px;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07);
+      }
+
+      .stat strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+      }
+
+      .stat span {
+        color: var(--muted);
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 310px minmax(0, 1fr);
+        gap: 14px;
+        align-items: start;
+      }
+
+      aside,
+      .workbench {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(var(--panel-rgb), 0.94);
+        box-shadow: var(--shadow);
+      }
+
+      aside {
+        position: sticky;
+        top: 122px;
+        max-height: calc(100vh - 144px);
+        overflow: auto;
+      }
+
+      .side-head,
+      .workbench-head {
+        border-bottom: 1px solid var(--line);
+        background: var(--panel-2);
+        padding: 12px;
+      }
+
+      .side-head h2,
+      .workbench-head h2 {
+        margin: 0;
+        font-size: 15px;
+      }
+
+      .project-list {
+        display: grid;
+        gap: 8px;
+        padding: 10px;
+      }
+
+      .project-item {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--field-bg);
+        color: var(--ink);
+        padding: 9px 10px;
+        text-align: left;
+      }
+
+      .project-item:hover,
+      .project-item.active {
+        border-color: rgba(31, 102, 209, 0.65);
+        background: var(--active-panel);
+      }
+
+      .project-item strong {
+        display: block;
+        font-size: 13px;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .sync-chip {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        vertical-align: middle;
+      }
+      .sync-chip.synced {
+        background: var(--success-bg);
+        color: var(--success-ink);
+        border: 1px solid var(--success-line);
+      }
+      .sync-chip.modified {
+        background: var(--modified-bg);
+        color: var(--modified-ink);
+        border: 1px solid var(--modified-line);
+      }
+      .sync-chip.unknown {
+        background: var(--hover-panel);
+        color: var(--ink-soft);
+        border: 1px solid var(--line);
+      }
+
+      .project-item span {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .settings-help {
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .settings-help code {
+        border-radius: 3px;
+        background: var(--hover-panel);
+        padding: 2px 4px;
+      }
+
+      .settings-note {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+      }
+
+      .settings-checkbox {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        margin: 2px 0 9px;
+        color: var(--ink-soft);
+        font-size: 13px;
+      }
+
+      .settings-checkbox input {
+        min-height: auto;
+      }
+
+      .workbench-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .cards {
+        display: grid;
+        gap: 12px;
+        padding: 12px;
+      }
+
+      .tc-card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        overflow: hidden;
+      }
+
+      .tc-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: start;
+        padding: 12px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel-2);
+      }
+
+      .tc-title {
+        margin: 0;
+        font-size: 19px;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .tc-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .chip {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--field-bg);
+        padding: 4px 8px;
+      }
+
+      .tc-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 7px;
+      }
+
+      .tc-body {
+        padding: 12px;
+      }
+
+      .tc-details {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .detail-block {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel-2);
+        padding: 10px 11px;
+      }
+
+      .detail-block.expected {
+        border-color: var(--success-line);
+        background: var(--success-bg);
+        color: var(--success-ink);
+      }
+
+      .detail-label {
+        display: block;
+        margin-bottom: 5px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 750;
+        text-transform: uppercase;
+      }
+
+      .detail-text {
+        margin: 0;
+        color: var(--ink-soft);
+        font-size: 16px;
+        line-height: 1.58;
+        white-space: pre-wrap;
+      }
+
+      .steps-list {
+        margin: 0;
+        padding-left: 22px;
+        color: var(--ink-soft);
+        font-size: 16px;
+        line-height: 1.58;
+      }
+
+      .steps-list li + li {
+        margin-top: 4px;
+      }
+
+      .execution-panel {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        padding: 10px 11px;
+      }
+
+      .actual-input,
+      .note-input {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--field-bg);
+        color: var(--ink);
+        font: inherit;
+        font-size: 16px;
+        line-height: 1.5;
+        padding: 9px 10px;
+        resize: vertical;
+      }
+
+      .markdown-preview {
+        margin-top: 8px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel-2);
+        color: var(--ink-soft);
+        padding: 9px 10px;
+        font-size: 14px;
+        line-height: 1.55;
+        overflow-x: auto;
+      }
+
+      .markdown-preview > :first-child {
+        margin-top: 0;
+      }
+
+      .markdown-preview > :last-child {
+        margin-bottom: 0;
+      }
+
+      .markdown-preview p,
+      .markdown-preview ul,
+      .markdown-preview ol,
+      .markdown-preview pre,
+      .markdown-preview table {
+        margin: 0 0 8px;
+      }
+
+      .markdown-preview ul,
+      .markdown-preview ol {
+        padding-left: 22px;
+      }
+
+      .markdown-preview h1,
+      .markdown-preview h2,
+      .markdown-preview h3,
+      .markdown-preview h4,
+      .markdown-preview h5,
+      .markdown-preview h6 {
+        margin: 0 0 8px;
+        color: var(--ink);
+        line-height: 1.3;
+      }
+
+      .markdown-preview h1 {
+        font-size: 20px;
+      }
+
+      .markdown-preview h2 {
+        font-size: 18px;
+      }
+
+      .markdown-preview h3 {
+        font-size: 16px;
+      }
+
+      .markdown-preview h4,
+      .markdown-preview h5,
+      .markdown-preview h6 {
+        font-size: 15px;
+      }
+
+      .markdown-preview code {
+        border-radius: 4px;
+        background: var(--hover-panel);
+        padding: 2px 4px;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 0.92em;
+      }
+
+      .markdown-preview pre {
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--field-bg);
+        padding: 9px 10px;
+      }
+
+      .markdown-preview pre code {
+        display: block;
+        background: transparent;
+        padding: 0;
+      }
+
+      .markdown-preview table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .markdown-preview th,
+      .markdown-preview td {
+        border: 1px solid var(--line);
+        padding: 6px 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .markdown-preview th {
+        background: var(--field-bg);
+        color: var(--ink);
+        font-weight: 750;
+      }
+
+      .markdown-preview-empty {
+        color: var(--muted);
+        font-style: italic;
+      }
+
+      .status-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .status-option {
+        display: inline-flex;
+        gap: 7px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel-2);
+        padding: 7px 10px;
+        color: var(--ink-soft);
+        font-size: 15px;
+        font-weight: 650;
+      }
+
+      .status-option.pass {
+        border-color: var(--success-line);
+        background: var(--success-bg);
+        color: var(--success-ink);
+      }
+
+      .status-option.fail {
+        border-color: var(--fail-line);
+        background: var(--fail-bg);
+        color: var(--fail-ink);
+      }
+
+      .status-option.uploaded {
+        border-color: var(--notice-line);
+        background: var(--notice-bg);
+        color: var(--notice-ink);
+      }
+
+      .dropzone {
+        display: flex;
+        min-height: 70px;
+        align-items: center;
+        justify-content: center;
+        border: 2px dashed #8bb8f1;
+        border-radius: var(--radius);
+        background: var(--drop-bg);
+        color: var(--muted);
+        text-align: center;
+        font-size: 15px;
+        line-height: 1.5;
+        padding: 14px;
+        outline: none;
+      }
+
+      .dropzone.active {
+        border-color: var(--blue);
+        background: var(--drop-active-bg);
+        color: var(--blue-dark);
+      }
+
+      .images {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .image-card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        overflow: hidden;
+      }
+
+      .image-order {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 26px;
+        min-height: 26px;
+        border-radius: 999px;
+        background: var(--badge-bg);
+        color: var(--field-bg);
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .image-card img {
+        display: block;
+        width: 100%;
+        background: var(--image-bg);
+      }
+
+      .image-info {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        padding: 9px;
+      }
+
+      .image-name {
+        color: var(--muted);
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+
+      .image-tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: flex-end;
+      }
+
+      .image-note {
+        border-top: 1px solid var(--line);
+        padding: 9px;
+      }
+
+      .empty {
+        border: 1px dashed var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        color: var(--muted);
+        padding: 26px 18px;
+        text-align: center;
+        line-height: 1.45;
+      }
+
+      .notice {
+        border: 1px solid var(--notice-line);
+        border-radius: var(--radius);
+        background: var(--notice-bg);
+        color: var(--notice-ink);
+        padding: 11px 12px;
+        margin-bottom: 14px;
+        line-height: 1.45;
+        font-size: 13px;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .toast {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        max-width: min(420px, calc(100vw - 36px));
+        z-index: 100;
+        border-radius: var(--radius);
+        background: #111827;
+        color: #fff;
+        padding: 12px 14px;
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+        font-size: 14px;
+      }
+
+      @media (max-width: 1100px) {
+        .toolbar {
+          grid-template-columns: 1fr 1fr;
+        }
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: static;
+          max-height: none;
+        }
+      }
+
+      @media (max-width: 700px) {
+        .topbar,
+        main {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+        .topbar {
+          padding-right: 154px;
+        }
+        .toolbar,
+        .status-grid,
+        .tc-head,
+        .image-info,
+        .detail-grid {
+          grid-template-columns: 1fr;
+        }
+        .workbench-head {
+          align-items: stretch;
+          flex-direction: column;
+        }
+        .workflow-workbench-actions,
+        .tc-workflow-head,
+        .tc-workflow-grid {
+          align-items: stretch;
+          grid-template-columns: 1fr;
+        }
+        .tc-actions {
+          justify-content: flex-start;
+        }
+        button {
+          width: 100%;
+        }
+        .theme-toggle {
+          right: 12px;
+          width: 42px;
+          min-height: 42px;
+        }
+        .help-toggle {
+          right: 60px;
+        }
+        .settings-toggle {
+          right: 108px;
+        }
+        .settings-drawer {
+          grid-template-columns: 1fr;
+        }
+        .settings-backdrop {
+          display: none;
+        }
+        .settings-panel {
+          width: 100%;
+          border-left: 0;
+        }
+        .help-dialog {
+          padding: 64px 12px 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="topbar">
+        <div class="title-row">
+          <h1>Xray Markdown Evidence Builder</h1>
+          <span class="author-credit">Built by SHIKDER SHONDHI</span>
+        </div>
+        <p class="sub">
+          Reusable project utility for loading Markdown or CSV test cases,
+          pasting screenshots against each TC, saving evidence locally, and
+          exporting/importing evidence bundles for later Xray use.
+        </p>
+        <div class="toolbar">
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Search TC ID, title, AC, or file..."
+          />
+          <select id="evidenceFilter" aria-label="Filter test cases by evidence">
+            <option value="all">All TCs</option>
+            <option value="with">With Evidence</option>
+            <option value="without">Without Evidence</option>
+            <option value="uploaded">Uploaded in Xray</option>
+            <option value="not-uploaded">Not Uploaded in Xray</option>
+          </select>
+        </div>
+      </div>
+      <button
+        id="themeToggleBtn"
+        class="theme-toggle"
+        type="button"
+        aria-label="Enable dark mode"
+        aria-pressed="false"
+        title="Enable dark mode"
+      ></button>
+      <button
+        id="helpToggleBtn"
+        class="theme-toggle help-toggle"
+        type="button"
+        aria-label="Open user manual"
+        title="Open user manual"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 2-3 4"></path>
+          <path d="M12 17h.01"></path>
+        </svg>
+      </button>
+      <button
+        id="settingsDrawerOpenBtn"
+        class="theme-toggle settings-toggle"
+        type="button"
+        aria-label="Open settings"
+        title="Open settings"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+      </button>
+    </header>
+
+    <div
+      id="helpDialog"
+      class="help-dialog hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="helpDialogTitle"
+      aria-hidden="true"
+    >
+      <div class="help-panel">
+        <div class="help-head">
+          <h2 id="helpDialogTitle">User Manual</h2>
+          <button id="helpCloseBtn" class="ghost small" type="button">
+            Close
+          </button>
+        </div>
+        <div class="help-content">
+          <section class="help-section">
+            <h3>Fresh Setup</h3>
+            <p>
+              Node.js is required. If <code>node -v</code> or
+              <code>npm -v</code> does not work, install Node.js first. For a
+              fresh copy, run setup once, check the setup, then start the app.
+            </p>
+            <ol>
+              <li><code>npm run setup</code></li>
+              <li><code>npm run doctor</code></li>
+              <li><code>npm run evidence:workflow</code></li>
+            </ol>
+            <button id="runSetupBtn" class="success small" type="button">
+              Run setup in terminal
+            </button>
+            <p>
+              The button works when this page is opened from the local server.
+              If this page was opened directly as a file, run the commands above
+              from the repo terminal.
+            </p>
+          </section>
+          <section class="help-section">
+            <h3>Daily Workflow</h3>
+            <ol>
+              <li>Run <code>npm run evidence:workflow</code> from the repo.</li>
+              <li>Load a Markdown or CSV testcase file.</li>
+              <li>Paste screenshots into the correct TC paste area.</li>
+              <li>Add notes and Actual Result text when needed.</li>
+              <li>Reorder screenshots with Up or Down.</li>
+              <li>Use Copy TC Evidence for one reliable combined image.</li>
+              <li>
+                Use copy seperatly to try separate screenshot clipboard items,
+                then paste once into Jira Xray.
+              </li>
+            </ol>
+          </section>
+          <section class="help-section">
+            <h3>Clipboard to Jira Xray</h3>
+            <ul>
+              <li>Copy copies one screenshot, including its note when filled.</li>
+              <li>
+                Copy TC Evidence creates one image with Actual Result first,
+                then notes and screenshots in visible order.
+              </li>
+              <li>
+                copy seperatly writes screenshots as separate clipboard image
+                items when the browser and OS support it.
+              </li>
+              <li>
+                If Jira Xray pastes only one item or the clipboard is rejected,
+                use Copy TC Evidence.
+              </li>
+            </ul>
+          </section>
+          <section class="help-section">
+            <h3>Jira Xray Workflow</h3>
+            <ol>
+              <li>Run <code>npm run evidence:workflow</code> from the repo to start the local server and open this page.</li>
+              <li>Open Settings and save the exact test execution summary under Xray Workflow.</li>
+              <li>Click Start Workflow in one TC card, or start all TCs with evidence from the workbench header.</li>
+              <li>Complete Atlassian login and 2FA in the Playwright browser within 3 minutes if prompted.</li>
+              <li>
+                The workflow matches Xray by testcase title/name. The local
+                TC-001 label is not sent to Xray.
+              </li>
+            </ol>
+          </section>
+          <section class="help-section">
+            <h3>GitHub Gist Use</h3>
+            <ol>
+              <li>Create a Personal Access Token with gist scope.</li>
+              <li>Open Settings.</li>
+              <li>Enter GitHub username and token.</li>
+              <li>Save Settings to create or reuse the private Gist ID.</li>
+              <li>
+                Export Settings to keep a portable Gist sync setup file.
+                Include token only when you need a full restore file.
+              </li>
+              <li>
+                Import Settings fills the Gist fields; click Save Settings to
+                apply them in this browser.
+              </li>
+              <li>Use Push to Gist to upload this browser's workspaces.</li>
+              <li>Use Sync from Gist on another browser to pull them back.</li>
+              <li>
+                Gist sync stores the evidence JSON, including screenshot data
+                saved in the workspace.
+              </li>
+            </ol>
+          </section>
+          <section class="help-section">
+            <h3>Backup</h3>
+            <p>
+              Browser storage can be cleared by browser cleanup or profile
+              changes. Use Export Evidence at the end of important sessions and
+              Import Evidence when you need to restore that JSON backup.
+            </p>
+          </section>
+          <section class="help-section">
+            <h3>Filtering Test Cases</h3>
+            <p>
+              Use the evidence filter beside search to show all test cases,
+              only test cases with saved screenshots, or only test cases still
+              missing screenshots.
+            </p>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="settingsDrawer"
+      class="settings-drawer hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settingsDrawerTitle"
+      aria-hidden="true"
+    >
+      <div id="settingsDrawerBackdrop" class="settings-backdrop"></div>
+      <div class="settings-panel" aria-label="Settings and actions">
+        <div class="settings-head">
+          <h2 id="settingsDrawerTitle">Settings</h2>
+          <button id="settingsDrawerCloseBtn" class="ghost small" type="button">
+            Close
+          </button>
+        </div>
+        <div class="settings-body">
+          <section class="settings-section">
+            <h3>Workspace</h3>
+            <input
+              id="fileInput"
+              type="file"
+              accept=".md,.markdown,.csv,text/markdown,text/plain,text/csv"
+            />
+            <div class="settings-actions">
+              <button id="newProjectBtn" class="ghost">New Workspace</button>
+              <button id="clearBtn" class="danger">Clear Workspace</button>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h3>Evidence Backup</h3>
+            <div class="settings-actions">
+              <button id="exportBtn" class="secondary">Export Evidence</button>
+              <button id="importBtn" class="secondary">Import Evidence</button>
+              <button id="exportMdBtn" class="ghost">Export Summary MD</button>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h3>Xray Workflow</h3>
+            <p class="settings-help">
+              Save the Test Execution Summary once for the active workspace.
+            </p>
+            <label style="display: block; margin-bottom: 8px; font-size: 13px">
+              Test Execution Summary
+              <input
+                id="workflowSummarySetting"
+                type="text"
+                placeholder="Exact Xray test execution summary"
+                style="width: 100%; margin-top: 6px"
+              />
+            </label>
+            <div class="workflow-mode-options" aria-label="Playwright browser mode">
+              <label class="workflow-mode-option">
+                <input name="workflowBrowserModeSetting" type="radio" value="headless" />
+                Headless
+              </label>
+              <label class="workflow-mode-option">
+                <input name="workflowBrowserModeSetting" type="radio" value="headed" />
+                Headed
+              </label>
+            </div>
+            <div class="settings-actions">
+              <button id="saveWorkflowSettingsBtn" class="ghost small">
+                Save Workflow Settings
+              </button>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h3>GitHub Gist Sync</h3>
+            <p class="settings-help">
+              Sync workspaces to a private GitHub Gist.
+              <a href="https://github.com/settings/tokens" target="_blank" rel="noopener" class="blue-link">Create a Personal Access Token</a>
+              with <code>gist</code> scope.
+            </p>
+            <label style="display: block; margin-bottom: 8px; font-size: 13px">
+              GitHub Username
+              <input
+                id="githubUsername"
+                type="text"
+                placeholder="your-github-username"
+                style="width: 100%; margin-top: 6px"
+              />
+            </label>
+            <label style="display: block; margin-bottom: 8px; font-size: 13px">
+              GitHub Personal Access Token
+              <input
+                id="githubToken"
+                type="password"
+                placeholder="ghp_..."
+                style="width: 100%; margin-top: 6px"
+              />
+            </label>
+            <label style="display: block; margin-bottom: 8px; font-size: 13px">
+              Gist ID
+              <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px">
+                <input
+                  id="gistId"
+                  type="text"
+                  placeholder="paste an existing gist id or leave blank"
+                  style="width: 100%"
+                />
+              </div>
+              <small class="settings-note">
+                Paste an existing Gist ID, or leave blank to auto-create one on save.
+              </small>
+            </label>
+            <label class="settings-checkbox">
+              <input id="includeGistTokenExport" type="checkbox" />
+              Include token in export
+            </label>
+            <div class="settings-actions">
+              <button id="saveGistBtn" class="ghost small">
+                Save Settings
+              </button>
+              <button id="exportGistSettingsBtn" class="ghost small">
+                Export Settings
+              </button>
+              <button id="importGistSettingsBtn" class="ghost small">
+                Import Settings
+              </button>
+              <button id="syncGistBtn" class="ghost small">
+                Sync from Gist
+              </button>
+              <button id="pushGistBtn" class="small">Push to Gist</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <main>
+      <div class="notice" id="supportNotice"></div>
+
+      <section class="status-grid" aria-label="Workspace status">
+        <div class="stat">
+          <strong>Workspace</strong><span id="workspaceName">No workspace</span>
+        </div>
+        <div class="stat">
+          <strong>Source File</strong
+          ><span id="sourceName">No testcase file loaded</span>
+        </div>
+        <div class="stat">
+          <strong>Test Cases</strong><span id="tcCount">0 test cases</span>
+        </div>
+        <div class="stat">
+          <strong>Evidence</strong><span id="imageCount">0 images saved</span>
+        </div>
+      </section>
+
+      <section class="layout">
+        <aside aria-label="Saved evidence workspaces">
+          <div class="side-head">
+            <h2>Saved Workspaces</h2>
+          </div>
+          <div id="projectList" class="project-list"></div>
+        </aside>
+
+        <section class="workbench" aria-label="Evidence workbench">
+          <div class="workbench-head">
+            <h2 id="workbenchTitle">Evidence Workbench</h2>
+            <div class="workflow-workbench-actions">
+              <button id="startWorkspaceWorkflowBtn" class="small success">
+                Start Workflow for All Evidence
+              </button>
+            </div>
+          </div>
+          <div id="cards" class="cards"></div>
+          <div id="emptyState" class="empty">
+            Load a Markdown or CSV testcase file to create reusable evidence
+            sections.
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <input
+      id="importInput"
+      class="hidden"
+      type="file"
+      accept=".json,application/json"
+    />
+    <input
+      id="gistSettingsImportInput"
+      class="hidden"
+      type="file"
+      accept=".json,application/json"
+    />
+
+    <script>
+      (() => {
+        const STORAGE_KEY = "neustring-xray-md-evidence-builder-v1";
+        const THEME_STORAGE_KEY = `${STORAGE_KEY}-theme`;
+        const WORKFLOW_STORAGE_KEY = `${STORAGE_KEY}-workflow`;
+        const IMAGE_DB_NAME = `${STORAGE_KEY}-images`;
+        const IMAGE_STORE_NAME = "screenshots";
+        const WORKFLOW_SERVICE_URL = /^https?:$/.test(window.location.protocol)
+          ? window.location.origin
+          : "http://127.0.0.1:39291";
+        const SERVICE_NAME = "Xray Markdown Evidence Builder";
+        const state = loadState();
+        const workflowState = {
+          summary: "",
+          browserMode: "headless",
+          serviceAvailable: false,
+          queueActive: false,
+          workflowRunsByTcId: new Map(),
+          pollingTimersByRunId: new Map(),
+        };
+
+        const $ = (id) => document.getElementById(id);
+        const els = {
+          fileInput: $("fileInput"),
+          searchInput: $("searchInput"),
+          evidenceFilter: $("evidenceFilter"),
+          newProjectBtn: $("newProjectBtn"),
+          exportBtn: $("exportBtn"),
+          importBtn: $("importBtn"),
+          themeToggleBtn: $("themeToggleBtn"),
+          helpToggleBtn: $("helpToggleBtn"),
+          helpDialog: $("helpDialog"),
+          helpCloseBtn: $("helpCloseBtn"),
+          runSetupBtn: $("runSetupBtn"),
+          settingsDrawerOpenBtn: $("settingsDrawerOpenBtn"),
+          settingsDrawer: $("settingsDrawer"),
+          settingsDrawerBackdrop: $("settingsDrawerBackdrop"),
+          settingsDrawerCloseBtn: $("settingsDrawerCloseBtn"),
+          clearBtn: $("clearBtn"),
+          importInput: $("importInput"),
+          exportMdBtn: $("exportMdBtn"),
+          startWorkspaceWorkflowBtn: $("startWorkspaceWorkflowBtn"),
+          supportNotice: $("supportNotice"),
+          workspaceName: $("workspaceName"),
+          sourceName: $("sourceName"),
+          tcCount: $("tcCount"),
+          imageCount: $("imageCount"),
+          projectList: $("projectList"),
+          cards: $("cards"),
+          emptyState: $("emptyState"),
+          workbenchTitle: $("workbenchTitle"),
+          // GitHub Gist sync settings
+          githubUsername: $("githubUsername"),
+          githubToken: $("githubToken"),
+          gistId: $("gistId"),
+          includeGistTokenExport: $("includeGistTokenExport"),
+          saveGistBtn: $("saveGistBtn"),
+          exportGistSettingsBtn: $("exportGistSettingsBtn"),
+          importGistSettingsBtn: $("importGistSettingsBtn"),
+          gistSettingsImportInput: $("gistSettingsImportInput"),
+          syncGistBtn: $("syncGistBtn"),
+          pushGistBtn: $("pushGistBtn"),
+          workflowSummarySetting: $("workflowSummarySetting"),
+          saveWorkflowSettingsBtn: $("saveWorkflowSettingsBtn"),
+        };
+
+        let periodicSyncTimer = null;
+        const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+        applyTheme(loadTheme());
+        bindGlobalEvents();
+        loadWorkflowSettings();
+        loadGistSettings();
+        initializeStoredImages()
+          .catch(showError)
+          .finally(() => {
+            render();
+            checkWorkflowService();
+          });
+
+        function bindGlobalEvents() {
+          els.fileInput.addEventListener("change", handleSourceFile);
+          els.searchInput.addEventListener("input", render);
+          els.evidenceFilter.addEventListener("change", render);
+          els.newProjectBtn.addEventListener("click", createBlankWorkspace);
+          els.exportBtn.addEventListener("click", () =>
+            exportWorkspaceJson().catch(showError),
+          );
+          els.importBtn.addEventListener("click", () =>
+            els.importInput.click(),
+          );
+          els.importInput.addEventListener("change", importWorkspaceJson);
+          els.startWorkspaceWorkflowBtn.addEventListener("click", () =>
+            startXrayWorkflowForWorkspace().catch(showError),
+          );
+          els.importGistSettingsBtn.addEventListener("click", () =>
+            els.gistSettingsImportInput.click(),
+          );
+          els.gistSettingsImportInput.addEventListener(
+            "change",
+            importGistSettings,
+          );
+          els.clearBtn.addEventListener("click", () =>
+            clearActiveWorkspace().catch(showError),
+          );
+          els.exportMdBtn.addEventListener("click", exportSummaryMarkdown);
+          els.themeToggleBtn.addEventListener("click", toggleTheme);
+          els.helpToggleBtn.addEventListener("click", openHelpDialog);
+          els.helpCloseBtn.addEventListener("click", closeHelpDialog);
+          els.runSetupBtn.addEventListener("click", runSetupFromManual);
+          els.helpDialog.addEventListener("click", (event) => {
+            if (event.target === els.helpDialog) closeHelpDialog();
+          });
+          els.settingsDrawerOpenBtn.addEventListener(
+            "click",
+            openSettingsDrawer,
+          );
+          els.settingsDrawerCloseBtn.addEventListener(
+            "click",
+            closeSettingsDrawer,
+          );
+          els.settingsDrawerBackdrop.addEventListener(
+            "click",
+            closeSettingsDrawer,
+          );
+          document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+              closeHelpDialog();
+              closeSettingsDrawer();
+            }
+          });
+
+          // GitHub Gist settings
+          if (els.saveGistBtn)
+            els.saveGistBtn.addEventListener("click", saveGistSettings);
+          if (els.saveWorkflowSettingsBtn)
+            els.saveWorkflowSettingsBtn.addEventListener(
+              "click",
+              saveWorkflowSettingsFromUi,
+            );
+          if (els.exportGistSettingsBtn)
+            els.exportGistSettingsBtn.addEventListener(
+              "click",
+              exportGistSettings,
+            );
+          if (els.syncGistBtn)
+            els.syncGistBtn.addEventListener("click", syncFromGist);
+          if (els.pushGistBtn)
+            els.pushGistBtn.addEventListener("click", pushToGist);
+        }
+
+        function loadTheme() {
+          try {
+            return localStorage.getItem(THEME_STORAGE_KEY) === "dark"
+              ? "dark"
+              : "light";
+          } catch {
+            return "light";
+          }
+        }
+
+        function applyTheme(theme) {
+          const normalizedTheme = theme === "dark" ? "dark" : "light";
+          document.body.dataset.theme = normalizedTheme;
+          try {
+            localStorage.setItem(THEME_STORAGE_KEY, normalizedTheme);
+          } catch {
+            /* Theme persistence is optional. */
+          }
+          updateThemeButton(normalizedTheme);
+        }
+
+        function toggleTheme() {
+          applyTheme(document.body.dataset.theme === "dark" ? "light" : "dark");
+        }
+
+        function updateThemeButton(theme) {
+          if (!els.themeToggleBtn) return;
+          const isDark = theme === "dark";
+          const label = isDark ? "Disable dark mode" : "Enable dark mode";
+          els.themeToggleBtn.innerHTML = isDark
+            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>'
+            : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 7.5A9 9 0 1 1 12 3Z"></path></svg>';
+          els.themeToggleBtn.setAttribute("aria-label", label);
+          els.themeToggleBtn.title = label;
+          els.themeToggleBtn.setAttribute("aria-pressed", String(isDark));
+        }
+
+        function openHelpDialog() {
+          els.helpDialog.classList.remove("hidden");
+          els.helpDialog.setAttribute("aria-hidden", "false");
+          els.helpCloseBtn.focus();
+        }
+
+        function closeHelpDialog() {
+          if (els.helpDialog.classList.contains("hidden")) return;
+          els.helpDialog.classList.add("hidden");
+          els.helpDialog.setAttribute("aria-hidden", "true");
+          els.helpToggleBtn.focus();
+        }
+
+        async function runSetupFromManual() {
+          if (!/^https?:$/.test(window.location.protocol)) {
+            toast("Open this page with npm run evidence:workflow before using Run setup.");
+            return;
+          }
+
+          els.runSetupBtn.disabled = true;
+          try {
+            const response = await fetch(`${WORKFLOW_SERVICE_URL}/setup/run`, {
+              method: "POST",
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(payload.error || "Could not start setup terminal.");
+            }
+            toast(payload.message || "Setup started in a new terminal.");
+          } catch (error) {
+            toast(error.message || "Could not start setup terminal.");
+          } finally {
+            els.runSetupBtn.disabled = false;
+          }
+        }
+
+        function openSettingsDrawer() {
+          els.settingsDrawer.classList.remove("hidden");
+          els.settingsDrawer.setAttribute("aria-hidden", "false");
+          els.settingsDrawerCloseBtn.focus();
+        }
+
+        function closeSettingsDrawer() {
+          if (els.settingsDrawer.classList.contains("hidden")) return;
+          els.settingsDrawer.classList.add("hidden");
+          els.settingsDrawer.setAttribute("aria-hidden", "true");
+          els.settingsDrawerOpenBtn.focus();
+        }
+
+        async function handleSourceFile(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          const text = await file.text();
+          const testCases = parseTestCases(text, file.name);
+
+          if (!testCases.length) {
+            toast(
+              "No test cases found. Expected IDs like TC-001 in Markdown headings or CSV ID columns.",
+            );
+            event.target.value = "";
+            return;
+          }
+
+          const workspace =
+            activeWorkspace() ||
+            createWorkspace(defaultWorkspaceName(file.name));
+          const previousTestCases = new Map(
+            workspace.testCases.map((tc) => [tc.id, tc]),
+          );
+
+          workspace.name = workspace.name || defaultWorkspaceName(file.name);
+          workspace.sourceName = file.name;
+          workspace.sourceType = file.name.toLowerCase().endsWith(".csv")
+            ? "csv"
+            : "markdown";
+          workspace.updatedAt = nowIso();
+          workspace.testCases = testCases.map((tc) => ({
+            ...tc,
+            actualResult: previousTestCases.get(tc.id)?.actualResult || "",
+            status: normalizeStatus(previousTestCases.get(tc.id)?.status),
+            xrayUploaded: Boolean(previousTestCases.get(tc.id)?.xrayUploaded),
+            images: previousTestCases.get(tc.id)?.images || [],
+          }));
+
+          loadWorkflowSettings();
+          saveState();
+          event.target.value = "";
+          render();
+          toast(`Loaded ${testCases.length} test cases from ${file.name}`);
+        }
+
+        function parseTestCases(text, fileName) {
+          if (fileName.toLowerCase().endsWith(".csv"))
+            return parseCsvTestCases(text);
+          return parseMarkdownTestCases(text);
+        }
+
+        function parseMarkdownTestCases(markdown) {
+          const lines = markdown.split(/\r?\n/);
+          const testCases = [];
+          const headingRe =
+            /^#{1,6}\s*(?:\d+(?:\.\d+)*\s*)?(TC[-_ ]?\d{1,5})\s*:?\s*(.+)?$/i;
+          const looseRe = /\b(TC[-_ ]?\d{1,5})\b\s*:?\s*(.+)?/i;
+
+          for (let index = 0; index < lines.length; index++) {
+            const raw = lines[index].trim();
+            const match = raw.match(headingRe) || raw.match(looseRe);
+            if (!match) continue;
+
+            const id = normalizeTcId(match[1]);
+            if (testCases.some((tc) => tc.id === id)) continue;
+
+            const block = readMarkdownBlock(lines, index + 1);
+            const title = cleanText(match[2]) || block.summary || id;
+            testCases.push({
+              id,
+              title,
+              summary: block.summary,
+              relatedAc: block.relatedAc,
+              precondition: block.precondition,
+              steps: block.steps,
+              expectedResult: block.expectedResult,
+              actualResult: "",
+              status: "unset",
+              xrayUploaded: false,
+              sourceLine: index + 1,
+              images: [],
+            });
+          }
+
+          return testCases;
+        }
+
+        function readMarkdownBlock(lines, startIndex) {
+          const block = {
+            summary: "",
+            relatedAc: "",
+            precondition: "",
+            steps: [],
+            expectedResult: "",
+          };
+          let activeField = "";
+
+          for (let i = startIndex; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (/^#{1,6}\s+/.test(line) && /\bTC[-_ ]?\d{1,5}\b/i.test(line))
+              break;
+
+            const label = line.match(
+              /^\-\s*\*\*(Summary|Related AC|Precondition|Preconditions|Steps|Expected Result):\*\*\s*(.*)$/i,
+            );
+            if (label) {
+              activeField = normalizeFieldName(label[1]);
+              assignTcField(block, activeField, label[2]);
+              continue;
+            }
+
+            const step = line.match(/^\s*(?:\d+\.|-)\s+(.+)$/);
+            if (activeField === "steps" && step) {
+              block.steps.push(cleanText(step[1]));
+              continue;
+            }
+
+            if (activeField && line && !line.startsWith("---")) {
+              appendTcField(block, activeField, line);
+            }
+          }
+
+          return block;
+        }
+
+        function parseCsvTestCases(csvText) {
+          const rows = parseCsvRows(csvText);
+          if (rows.length < 2) return [];
+
+          const headers = rows[0].map((header) => header.trim().toLowerCase());
+          const idIndex = findHeader(headers, ["id", "test case id", "tc id"]);
+          const titleIndex = findHeader(headers, [
+            "test case",
+            "title",
+            "name",
+          ]);
+          const summaryIndex = findHeader(headers, ["summary", "description"]);
+          const acIndex = findHeader(headers, [
+            "related ac",
+            "ac",
+            "acceptance criteria",
+          ]);
+          const preconditionIndex = findHeader(headers, [
+            "precondition",
+            "preconditions",
+            "data",
+            "test data",
+          ]);
+          const stepsIndex = findHeader(headers, [
+            "steps",
+            "test steps",
+            "action",
+            "actions",
+          ]);
+          const expectedIndex = findHeader(headers, [
+            "expected result",
+            "expected",
+            "expected results",
+          ]);
+
+          if (idIndex === -1) return [];
+
+          return rows
+            .slice(1)
+            .map((row, index) => {
+              const id = normalizeTcId(row[idIndex]);
+              if (!id) return null;
+              return {
+                id,
+                title: cleanText(row[titleIndex] || row[summaryIndex] || id),
+                summary: cleanText(row[summaryIndex]),
+                relatedAc: cleanText(row[acIndex]),
+                precondition: cleanText(row[preconditionIndex]),
+                steps: splitSteps(row[stepsIndex]),
+                expectedResult: cleanText(row[expectedIndex]),
+                actualResult: "",
+                status: "unset",
+                xrayUploaded: false,
+                sourceLine: index + 2,
+                images: [],
+              };
+            })
+            .filter(Boolean)
+            .filter(uniqueById);
+        }
+
+        function parseCsvRows(text) {
+          const rows = [];
+          let row = [];
+          let field = "";
+          let quoted = false;
+
+          for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            const next = text[i + 1];
+
+            if (char === '"' && quoted && next === '"') {
+              field += '"';
+              i++;
+            } else if (char === '"') {
+              quoted = !quoted;
+            } else if (char === "," && !quoted) {
+              row.push(field);
+              field = "";
+            } else if ((char === "\n" || char === "\r") && !quoted) {
+              if (char === "\r" && next === "\n") i++;
+              row.push(field);
+              if (row.some((value) => value.trim())) rows.push(row);
+              row = [];
+              field = "";
+            } else {
+              field += char;
+            }
+          }
+
+          row.push(field);
+          if (row.some((value) => value.trim())) rows.push(row);
+          return rows;
+        }
+
+        function normalizeFieldName(value) {
+          const field = String(value || "").toLowerCase();
+          if (field === "related ac") return "relatedAc";
+          if (field === "precondition" || field === "preconditions")
+            return "precondition";
+          if (field === "expected result") return "expectedResult";
+          return field;
+        }
+
+        function assignTcField(block, field, value) {
+          const text = cleanText(value);
+          if (!text) return;
+          if (field === "steps") {
+            block.steps.push(...splitSteps(text));
+            return;
+          }
+          block[field] = text;
+        }
+
+        function appendTcField(block, field, value) {
+          const text = cleanText(value);
+          if (!text) return;
+          if (field === "steps") {
+            block.steps.push(...splitSteps(text));
+            return;
+          }
+          block[field] = [block[field], text].filter(Boolean).join("\n");
+        }
+
+        function splitSteps(value) {
+          return String(value || "")
+            .split(/\s+\|\s+|\r?\n|(?=\s*\d+[\).]\s+)/)
+            .map((step) => cleanText(step).replace(/^\d+[\).]\s*/, ""))
+            .filter(Boolean);
+        }
+
+        function render() {
+          ensureActiveWorkspace();
+          renderSupportNotice();
+          renderStatus();
+          renderProjectList();
+          renderCards();
+        }
+
+        function renderSupportNotice() {
+          const clipboardWritable = Boolean(
+            navigator.clipboard && window.ClipboardItem,
+          );
+          els.supportNotice.innerHTML = clipboardWritable
+            ? "<strong>Saved evidence persists in this browser.</strong> Use Export Evidence to keep a portable backup with your future MD files."
+            : "<strong>Clipboard image copy is limited in this browser.</strong> You can still save, export, and import evidence, but image copy may require Chrome or Edge over a secure/local page.";
+        }
+
+        function renderStatus() {
+          const workspace = activeWorkspace();
+          const totalImages = workspace
+            ? workspace.testCases.reduce((sum, tc) => sum + tc.images.length, 0)
+            : 0;
+          els.workspaceName.textContent = workspace
+            ? workspace.name
+            : "No workspace";
+          els.sourceName.textContent =
+            workspace?.sourceName || "No testcase file loaded";
+          els.tcCount.textContent = `${workspace?.testCases.length || 0} test cases`;
+          els.imageCount.textContent = `${totalImages} images saved`;
+          els.workbenchTitle.textContent = workspace
+            ? workspace.name
+            : "Evidence Workbench";
+          els.startWorkspaceWorkflowBtn.disabled =
+            !workspace || !totalImages || workflowState.queueActive;
+          renderWorkflowSettingsUi();
+        }
+
+        function renderProjectList() {
+          if (!state.workspaces.length) {
+            els.projectList.innerHTML =
+              '<div class="empty">No saved workspaces yet.</div>';
+            return;
+          }
+
+          els.projectList.innerHTML = state.workspaces
+            .map((workspace) => {
+              const count = workspace.testCases.reduce(
+                (sum, tc) => sum + tc.images.length,
+                0,
+              );
+              const active =
+                workspace.id === state.activeWorkspaceId ? " active" : "";
+
+              const status =
+                workspace.remoteStatus ||
+                (workspace.remoteSyncedAt ? "synced" : "unknown");
+              const syncedAt = workspace.remoteSyncedAt
+                ? formatDate(workspace.remoteSyncedAt)
+                : "Never";
+              const statusClass =
+                status === "synced"
+                  ? "synced"
+                  : status === "modified"
+                    ? "modified"
+                    : "unknown";
+              const lastChecked = workspace.remoteCheckedAt ? formatDate(workspace.remoteCheckedAt) : (workspace.remoteSyncedAt ? formatDate(workspace.remoteSyncedAt) : 'Never');
+              const syncHtml = `<span class="sync-chip ${statusClass}" title="Remote status: ${status} · Last checked: ${lastChecked}">${status === "synced" ? "Synced" : status === "modified" ? "Modified" : "Unknown"}</span>`;
+
+              return `<button class="project-item${active}" data-action="select-workspace" data-workspace="${workspace.id}">
+            <strong>${escapeHtml(workspace.name)}${syncHtml}</strong>
+            <span>${escapeHtml(workspace.sourceName || "No file")} · ${workspace.testCases.length} TCs · ${count} images</span>
+          </button>`;
+            })
+            .join("");
+
+          els.projectList
+            .querySelectorAll('[data-action="select-workspace"]')
+            .forEach((button) => {
+              button.addEventListener("click", () => {
+                state.activeWorkspaceId = button.dataset.workspace;
+                loadWorkflowSettings();
+                saveState();
+                render();
+              });
+            });
+        }
+
+        function renderCards() {
+          const workspace = activeWorkspace();
+          const query = els.searchInput.value.trim().toLowerCase();
+          const evidenceFilter = els.evidenceFilter.value;
+          const testCases = workspace
+            ? workspace.testCases.filter(
+                (tc) =>
+                  matchesQuery(tc, query) &&
+                  matchesEvidenceFilter(tc, evidenceFilter),
+              )
+            : [];
+
+          els.emptyState.textContent =
+            workspace && workspace.testCases.length
+              ? "No test cases match the current filters."
+              : "Load a Markdown or CSV testcase file to create reusable evidence sections.";
+          els.emptyState.classList.toggle(
+            "hidden",
+            Boolean(workspace && testCases.length),
+          );
+          els.cards.innerHTML = testCases.map(cardHtml).join("");
+          bindCardEvents();
+        }
+
+        function cardHtml(tc) {
+          const images = tc.images || [];
+          const detailsHtml = tcDetailsHtml(tc);
+          const imageHtml = images.length
+            ? images
+                .map((image, index) => imageCardHtml(tc, image, index))
+                .join("")
+            : '<div class="empty">No evidence saved for this TC yet.</div>';
+
+          return `<article class="tc-card" data-tc="${tc.id}">
+          <div class="tc-head">
+            <div>
+              <h3 class="tc-title">${tc.id}: ${escapeHtml(tc.title)}</h3>
+              <div class="tc-meta">
+                <span class="chip">Line ${tc.sourceLine || "-"}</span>
+                <span class="chip">${images.length} image${images.length === 1 ? "" : "s"}</span>
+                ${tc.relatedAc ? `<span class="chip">${escapeHtml(tc.relatedAc)}</span>` : ""}
+              </div>
+            </div>
+            <div class="tc-actions">
+              <button class="small success" data-action="copy-all" data-tc="${tc.id}">Copy TC Evidence</button>
+              <button class="small success" data-action="copy-separately" data-tc="${tc.id}">copy seperatly</button>
+              <button class="small danger" data-action="clear-tc" data-tc="${tc.id}">Clear</button>
+            </div>
+          </div>
+          <div class="tc-body">
+            ${detailsHtml}
+            ${executionHtml(tc)}
+            <div class="dropzone" tabindex="0" data-action="paste" data-tc="${tc.id}">
+              Click here, then paste a copied screenshot with Ctrl+V. Multiple images are saved in this workspace.
+            </div>
+            <div class="images">${imageHtml}</div>
+            ${workflowPanelHtml(tc)}
+          </div>
+        </article>`;
+        }
+
+        function workflowPanelHtml(tc) {
+          const images = tc.images || [];
+          const runState = workflowState.workflowRunsByTcId.get(tc.id);
+          const browserMode = normalizeBrowserMode(workflowState.browserMode);
+          const noEvidence = !images.length;
+          const workflowDisabled = noEvidence || workflowState.queueActive;
+          const summaryText = workflowState.summary
+            ? escapeHtml(workflowState.summary)
+            : "Not saved. Open Settings and save it once for this workspace.";
+
+          return `<section class="tc-workflow-panel" data-workflow-panel="${tc.id}" aria-label="${escapeAttr(tc.id)} Xray workflow">
+          <div class="tc-workflow-head">
+            <h4 class="tc-workflow-title">Xray Workflow</h4>
+            <button class="small success" data-action="start-workflow" data-tc="${tc.id}" ${workflowDisabled ? "disabled" : ""}>Start Workflow</button>
+          </div>
+          <div class="tc-workflow-grid">
+            <div class="workflow-summary-label">
+              <span>Test Execution Summary</span>
+              <strong>${summaryText}</strong>
+            </div>
+            <div class="workflow-mode-options">Browser mode: ${browserMode}</div>
+          </div>
+          <div class="workflow-status${workflowStatusClass(tc, runState)}">${workflowStatusText(tc, runState)}</div>
+          ${workflowRunHtml(tc, runState)}
+        </section>`;
+        }
+
+        function executionHtml(tc) {
+          const status = normalizeStatus(tc.status);
+          return `<div class="execution-panel">
+          <label>
+            <span class="detail-label">Actual Result:</span>
+            <textarea class="actual-input" rows="3" data-action="actual-result" data-tc="${tc.id}" placeholder="Write the actual result for this test case...">${escapeHtml(tc.actualResult || "")}</textarea>
+            <div class="markdown-preview" data-markdown-preview="actual-result" data-tc="${tc.id}">${renderMarkdownPreview(tc.actualResult)}</div>
+          </label>
+          <div class="status-controls" role="group" aria-label="${tc.id} execution status">
+            <label class="status-option pass">
+              <input type="checkbox" data-action="status" data-status="pass" data-tc="${tc.id}" ${status === "pass" ? "checked" : ""}>
+              Pass
+            </label>
+            <label class="status-option fail">
+              <input type="checkbox" data-action="status" data-status="fail" data-tc="${tc.id}" ${status === "fail" ? "checked" : ""}>
+              Fail
+            </label>
+            <label class="status-option uploaded">
+              <input type="checkbox" data-action="xray-uploaded" data-tc="${tc.id}" ${tc.xrayUploaded ? "checked" : ""}>
+              Uploaded in Xray
+            </label>
+          </div>
+        </div>`;
+        }
+
+        function tcDetailsHtml(tc) {
+          const steps = Array.isArray(tc.steps) ? tc.steps.filter(Boolean) : [];
+          const hasDetails =
+            tc.summary || tc.precondition || steps.length || tc.expectedResult;
+          if (!hasDetails) return "";
+
+          return `<div class="tc-details">
+          <div class="detail-grid">
+            ${detailBlockHtml("Summary", tc.summary)}
+            ${detailBlockHtml("Preconditions", tc.precondition)}
+          </div>
+          ${steps.length ? `<div class="detail-block"><span class="detail-label">Steps</span><ol class="steps-list">${steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol></div>` : ""}
+          ${detailBlockHtml("Expected Result", tc.expectedResult, "expected")}
+        </div>`;
+        }
+
+        function detailBlockHtml(label, value, className = "") {
+          if (!value) return "";
+          return `<div class="detail-block ${className}"><span class="detail-label">${label}</span><p class="detail-text">${escapeHtml(value)}</p></div>`;
+        }
+
+        function imageCardHtml(tc, image, index) {
+          const src = image.dataUrl || "";
+          return `<div class="image-card">
+          <img src="${src}" alt="${tc.id} evidence ${index + 1}">
+          <div class="image-info">
+            <span class="image-name"><span class="image-order">${index + 1}</span> Image ${index + 1} · ${formatDate(image.createdAt)}</span>
+            <span class="image-tools">
+              <button class="small ghost" data-action="move-up" data-tc="${tc.id}" data-index="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
+              <button class="small ghost" data-action="move-down" data-tc="${tc.id}" data-index="${index}" ${index === tc.images.length - 1 ? "disabled" : ""}>Down</button>
+              <button class="small success" data-action="copy-one" data-tc="${tc.id}" data-index="${index}">Copy</button>
+              <button class="small danger" data-action="delete-image" data-tc="${tc.id}" data-index="${index}">Delete</button>
+            </span>
+          </div>
+          <div class="image-note">
+            <label>
+              <span class="detail-label">Screenshot Note</span>
+              <textarea class="note-input" rows="2" data-action="image-note" data-tc="${tc.id}" data-index="${index}" placeholder="Optional note copied above this screenshot...">${escapeHtml(image.note || "")}</textarea>
+              <div class="markdown-preview" data-markdown-preview="image-note" data-tc="${tc.id}" data-index="${index}">${renderMarkdownPreview(image.note)}</div>
+            </label>
+          </div>
+        </div>`;
+        }
+
+        function bindCardEvents() {
+          els.cards
+            .querySelectorAll('[data-action="paste"]')
+            .forEach((zone) => {
+              zone.addEventListener("focus", () =>
+                zone.classList.add("active"),
+              );
+              zone.addEventListener("blur", () =>
+                zone.classList.remove("active"),
+              );
+              zone.addEventListener("paste", (event) =>
+                handlePaste(event, zone.dataset.tc),
+              );
+            });
+
+          els.cards
+            .querySelectorAll("button[data-action]")
+            .forEach((button) => {
+              button.addEventListener("click", () => handleCardAction(button));
+            });
+
+          els.cards
+            .querySelectorAll('textarea[data-action="actual-result"]')
+            .forEach((input) => {
+              input.addEventListener("paste", (event) => {
+                handleMarkupTextareaPaste(event, input);
+              });
+              input.addEventListener("input", () => {
+                updateActualResult(input.dataset.tc, input.value);
+                updateMarkdownPreview("actual-result", input.dataset.tc, null, input.value);
+              });
+            });
+
+          els.cards
+            .querySelectorAll('input[data-action="status"]')
+            .forEach((input) => {
+              input.addEventListener("change", () =>
+                updateStatus(
+                  input.dataset.tc,
+                  input.dataset.status,
+                  input.checked,
+                ),
+              );
+            });
+
+          els.cards
+            .querySelectorAll('input[data-action="xray-uploaded"]')
+            .forEach((input) => {
+              input.addEventListener("change", () =>
+                updateXrayUploaded(input.dataset.tc, input.checked),
+              );
+            });
+
+          els.cards
+            .querySelectorAll('textarea[data-action="image-note"]')
+            .forEach((input) => {
+              input.addEventListener("paste", (event) => {
+                handleMarkupTextareaPaste(event, input);
+              });
+              input.addEventListener("input", () => {
+                updateImageNote(
+                  input.dataset.tc,
+                  Number(input.dataset.index),
+                  input.value,
+                );
+                updateMarkdownPreview(
+                  "image-note",
+                  input.dataset.tc,
+                  Number(input.dataset.index),
+                  input.value,
+                );
+              });
+            });
+
+          els.cards
+            .querySelectorAll("[data-workflow-panel]")
+            .forEach(bindWorkflowPanelEvents);
+        }
+
+        function bindWorkflowPanelEvents(panel) {
+          panel
+            .querySelectorAll('button[data-action="start-workflow"]')
+            .forEach((button) => {
+              button.addEventListener("click", () =>
+                startXrayWorkflowForTc(button.dataset.tc).catch(showError),
+              );
+            });
+
+          panel
+            .querySelectorAll('[data-action="toggle-workflow-logs"]')
+            .forEach((button) => {
+              button.addEventListener("click", () => {
+                const runState = workflowState.workflowRunsByTcId.get(
+                  button.dataset.tc,
+                );
+                if (!runState) return;
+                runState.logsExpanded = !runState.logsExpanded;
+                renderTcWorkflowPanel(button.dataset.tc);
+              });
+            });
+        }
+
+        async function handlePaste(event, tcId) {
+          const items = Array.from(event.clipboardData?.items || []);
+          const imageItems = items.filter((item) =>
+            item.type.startsWith("image/"),
+          );
+
+          if (!imageItems.length) {
+            toast("No image found in the clipboard.");
+            return;
+          }
+
+          for (const item of imageItems) {
+            const file = item.getAsFile();
+            if (!file) continue;
+            await addImage(tcId, await fileToDataUrl(file));
+          }
+
+          render();
+          toast(
+            `Saved ${imageItems.length} image${imageItems.length === 1 ? "" : "s"} for ${tcId}`,
+          );
+        }
+
+        function handleMarkupTextareaPaste(event, input) {
+          const tableMarkdown = clipboardTableToMarkdown(event.clipboardData);
+          if (!tableMarkdown) return;
+          event.preventDefault();
+          insertTextareaText(input, tableMarkdown);
+          if (input.dataset.action === "actual-result") {
+            updateActualResult(input.dataset.tc, input.value);
+            updateMarkdownPreview("actual-result", input.dataset.tc, null, input.value);
+            return;
+          }
+          if (input.dataset.action === "image-note") {
+            updateImageNote(
+              input.dataset.tc,
+              Number(input.dataset.index),
+              input.value,
+            );
+            updateMarkdownPreview(
+              "image-note",
+              input.dataset.tc,
+              Number(input.dataset.index),
+              input.value,
+            );
+          }
+        }
+
+        function clipboardTableToMarkdown(clipboardData) {
+          if (!clipboardData) return "";
+          const htmlMarkdown = htmlTableToMarkdown(
+            clipboardData.getData("text/html"),
+          );
+          if (htmlMarkdown) return htmlMarkdown;
+          return tabularTextToMarkdown(clipboardData.getData("text/plain"));
+        }
+
+        function htmlTableToMarkdown(html) {
+          if (!html || !/<table[\s>]/i.test(html)) return "";
+          const template = document.createElement("template");
+          template.innerHTML = html;
+          const table = template.content.querySelector("table");
+          if (!table) return "";
+          const rows = Array.from(table.querySelectorAll("tr"))
+            .map((row) =>
+              Array.from(row.querySelectorAll("th,td")).map((cell) =>
+                normalizeMarkupText(cell.textContent),
+              ),
+            )
+            .filter((row) => row.length);
+          return rowsToMarkdownTable(rows);
+        }
+
+        function tabularTextToMarkdown(text) {
+          const rows = String(text || "")
+            .replace(/\r\n?/g, "\n")
+            .split("\n")
+            .map((line) => line.split("\t").map(normalizeMarkupText))
+            .filter((row) => row.length > 1 && row.some(Boolean));
+          return rowsToMarkdownTable(rows);
+        }
+
+        function rowsToMarkdownTable(rows) {
+          if (!Array.isArray(rows) || rows.length < 2) return "";
+          const columnCount = Math.max(...rows.map((row) => row.length));
+          const normalizedRows = rows.map((row) =>
+            Array.from({ length: columnCount }, (_, index) =>
+              escapeMarkdownTableCell(row[index] || ""),
+            ),
+          );
+          return [
+            markdownTableRow(normalizedRows[0]),
+            markdownTableRow(Array.from({ length: columnCount }, () => "---")),
+            ...normalizedRows.slice(1).map(markdownTableRow),
+          ].join("\n");
+        }
+
+        function markdownTableRow(cells) {
+          return `| ${cells.join(" | ")} |`;
+        }
+
+        function escapeMarkdownTableCell(value) {
+          return normalizeMarkupText(value).replace(/\|/g, "\\|");
+        }
+
+        function insertTextareaText(input, text) {
+          const start = input.selectionStart ?? input.value.length;
+          const end = input.selectionEnd ?? input.value.length;
+          const before = input.value.slice(0, start);
+          const after = input.value.slice(end);
+          const prefix = before && !before.endsWith("\n") ? "\n\n" : "";
+          const suffix = after && !after.startsWith("\n") ? "\n\n" : "";
+          input.value = `${before}${prefix}${text}${suffix}${after}`;
+          const cursor = before.length + prefix.length + text.length;
+          input.setSelectionRange(cursor, cursor);
+        }
+
+        function handleCardAction(button) {
+          const action = button.dataset.action;
+          const tcId = button.dataset.tc;
+          const index = Number(button.dataset.index);
+
+          if (action === "copy-one") copyOneImage(tcId, index).catch(showError);
+          if (action === "copy-all") copyTcEvidence(tcId).catch(showError);
+          if (action === "copy-separately")
+            copyTcEvidenceSeparately(tcId).catch(showError);
+          if (action === "move-up") moveImage(tcId, index, -1);
+          if (action === "move-down") moveImage(tcId, index, 1);
+          if (action === "delete-image") deleteImage(tcId, index).catch(showError);
+          if (action === "clear-tc") clearTcImages(tcId).catch(showError);
+          if (action === "download-tc") downloadTcJson(tcId);
+        }
+
+        async function addImage(tcId, dataUrl) {
+          const tc = getTc(tcId);
+          if (!tc) return;
+
+          const workspace = activeWorkspace();
+          if (!workspace) return;
+          const image = {
+            id: cryptoId(),
+            note: "",
+            createdAt: nowIso(),
+          };
+          await saveImageData(workspace.id, tc.id, image, dataUrl);
+          tc.images.push(image);
+
+          workspace.updatedAt = nowIso();
+          workspace.remoteStatus = "modified";
+          saveState();
+        }
+
+        async function copyOneImage(tcId, index) {
+          const image = getTc(tcId)?.images[index];
+          if (!image) return;
+
+          const dataUrl = image.note
+            ? await composeSingleEvidenceImage(image, index)
+            : await ensureImageDataUrl(image);
+          await copyDataUrlToClipboard(dataUrl);
+          toast(`Copied ${tcId} image ${index + 1}`);
+        }
+
+        async function copyTcEvidence(tcId) {
+          const tc = getTc(tcId);
+          if (!tc || !tc.images.length) {
+            toast("No evidence to copy for this TC.");
+            return;
+          }
+
+          const dataUrl = await composeEvidenceImage(tc);
+          await copyDataUrlToClipboard(dataUrl);
+          toast(`Copied ${tc.id} evidence as one image`);
+        }
+
+        async function copyTcEvidenceSeparately(tcId) {
+          const tc = getTc(tcId);
+          if (!tc || !tc.images.length) {
+            toast("No evidence to copy for this TC.");
+            return;
+          }
+
+          const items = await buildSeparateEvidenceClipboardItems(tc);
+          try {
+            await copyClipboardItems(items);
+            toast(`Copied ${tc.id} screenshots separately. Paste once in Xray.`);
+          } catch (error) {
+            console.warn("Multi-image clipboard copy failed", error);
+            toast(
+              "Clipboard rejected separate screenshots. Use Copy TC Evidence for one reliable combined image.",
+            );
+          }
+        }
+
+        function loadWorkflowSettings() {
+          const workspace = activeWorkspace();
+          const legacy = readLegacyWorkflowSettings();
+          if (workspace && !workspace.workflow?.testExecutionSummary && legacy.testExecutionSummary) {
+            workspace.workflow = {
+              testExecutionSummary: legacy.testExecutionSummary,
+              browserMode: legacy.browserMode,
+              savedAt: legacy.savedAt || nowIso(),
+            };
+            saveState();
+          }
+
+          if (workspace?.workflow) {
+            workflowState.summary = workspace.workflow.testExecutionSummary || "";
+            workflowState.browserMode = normalizeBrowserMode(
+              workspace.workflow.browserMode,
+            );
+          } else {
+            workflowState.summary = "";
+            workflowState.browserMode = "headless";
+          }
+          renderWorkflowSettingsUi();
+        }
+
+        function readLegacyWorkflowSettings() {
+          try {
+            const saved = JSON.parse(
+              localStorage.getItem(WORKFLOW_STORAGE_KEY) || "{}",
+            );
+            return {
+              testExecutionSummary: cleanText(saved.testExecutionSummary),
+              browserMode: normalizeBrowserMode(saved.browserMode),
+              savedAt: saved.savedAt || "",
+            };
+          } catch {
+            return {
+              testExecutionSummary: "",
+              browserMode: "headless",
+              savedAt: "",
+            };
+          }
+        }
+
+        function saveWorkflowSettings(options = {}) {
+          const workspace = activeWorkspace();
+          if (!workspace) {
+            toast("Create or select a workspace before saving workflow settings.");
+            return;
+          }
+          workflowState.summary = String(
+            options.summary ?? workflowState.summary,
+          ).trim();
+          workflowState.browserMode = normalizeBrowserMode(
+            options.browserMode ?? workflowState.browserMode,
+          );
+          workspace.workflow = {
+            testExecutionSummary: workflowState.summary,
+            browserMode: workflowState.browserMode,
+            savedAt: nowIso(),
+          };
+          workspace.updatedAt = nowIso();
+          workspace.remoteStatus = "modified";
+          saveState();
+          renderWorkflowSettingsUi();
+          if (!options.silent) renderCards();
+        }
+
+        function saveWorkflowSettingsFromUi() {
+          const browserMode = document.querySelector(
+            'input[name="workflowBrowserModeSetting"]:checked',
+          )?.value;
+          saveWorkflowSettings({
+            summary: els.workflowSummarySetting?.value || "",
+            browserMode,
+            silent: false,
+          });
+          toast("Workflow settings saved for this workspace.");
+        }
+
+        function renderWorkflowSettingsUi() {
+          if (els.workflowSummarySetting) {
+            els.workflowSummarySetting.value = workflowState.summary;
+            els.workflowSummarySetting.disabled = !activeWorkspace();
+          }
+          document
+            .querySelectorAll('input[name="workflowBrowserModeSetting"]')
+            .forEach((input) => {
+              input.checked = input.value === workflowState.browserMode;
+              input.disabled = !activeWorkspace();
+            });
+          if (els.saveWorkflowSettingsBtn) {
+            els.saveWorkflowSettingsBtn.disabled = !activeWorkspace();
+          }
+        }
+
+        function normalizeBrowserMode(value) {
+          return String(value || "").toLowerCase() === "headed"
+            ? "headed"
+            : "headless";
+        }
+
+        function normalizeWorkflowSettings(value) {
+          if (!value || typeof value !== "object") return null;
+          return {
+            testExecutionSummary: cleanText(value.testExecutionSummary),
+            browserMode: normalizeBrowserMode(value.browserMode),
+            savedAt: value.savedAt || "",
+          };
+        }
+
+        async function checkWorkflowService() {
+          try {
+            const response = await fetch(`${WORKFLOW_SERVICE_URL}/health`, {
+              cache: "no-store",
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            workflowState.serviceAvailable = true;
+          } catch {
+            workflowState.serviceAvailable = false;
+          }
+          renderWorkflowPanels();
+        }
+
+        async function startXrayWorkflowForTc(tcId) {
+          const tc = getTc(tcId);
+          if (!tc) throw new Error("Test case was not found.");
+          await startXrayWorkflow([tc], "single");
+        }
+
+        async function startXrayWorkflowForWorkspace() {
+          const workspace = activeWorkspace();
+          const items = workspace?.testCases.filter((tc) => tc.images.length) || [];
+          if (!items.length) {
+            toast("No test cases with evidence to upload.");
+            return;
+          }
+          const unsetCount = items.filter((tc) => normalizeStatus(tc.status) === "unset").length;
+          const confirmed = confirm(
+            `Start workflow upload for ${items.length} test case${items.length === 1 ? "" : "s"}?\n\n${unsetCount} unset status${unsetCount === 1 ? "" : "es"} will be saved and sent as Pass.\n\nUploads run one test case at a time and continue after failures.`,
+          );
+          if (!confirmed) return;
+          await startXrayWorkflowQueue(items);
+        }
+
+        async function startXrayWorkflowQueue(testCases) {
+          if (workflowState.queueActive) return;
+          workflowState.queueActive = true;
+          render();
+          const results = [];
+          try {
+            for (const tc of testCases) {
+              try {
+                await startXrayWorkflow([tc], "single", { awaitCompletion: true, suppressFinalToast: true });
+                const runState = workflowState.workflowRunsByTcId.get(tc.id);
+                const status = runState?.run?.status || "failed";
+                results.push({ tc, status });
+              } catch (error) {
+                markTcWorkflowFailed(tc, error.message);
+                results.push({ tc, status: "failed" });
+              }
+            }
+          } finally {
+            workflowState.queueActive = false;
+            render();
+          }
+
+          const succeeded = results.filter((item) => item.status === "success").length;
+          const failed = results.length - succeeded;
+          toast(
+            failed
+              ? `Workflow queue finished: ${succeeded}/${results.length} uploaded, ${failed} failed.`
+              : `Workflow queue completed: ${succeeded}/${results.length} uploaded.`,
+          );
+        }
+
+        async function startXrayWorkflow(testCases, mode, options = {}) {
+          const summary = workflowState.summary.trim();
+          if (!summary) {
+            throw new Error("Open Settings and save the Xray test execution summary once for this workspace.");
+          }
+
+          await checkWorkflowService();
+          if (!workflowState.serviceAvailable) {
+            throw new Error(
+              "Local workflow service is unavailable. Run npm run evidence:workflow.",
+            );
+          }
+
+          const queuedRun = {
+            status: "queued",
+            message: "Preparing evidence image payload...",
+            payloadSummary: {
+              mode,
+              browserMode: workflowState.browserMode,
+              itemCount: testCases.length,
+            },
+            results: [],
+            logs: [],
+          };
+          testCases.forEach((tc) => {
+            workflowState.workflowRunsByTcId.set(tc.id, {
+              testcaseName: tc.title,
+              run: {
+                ...queuedRun,
+                payloadSummary: { ...queuedRun.payloadSummary, itemCount: 1 },
+              },
+              logsExpanded: false,
+            });
+            renderTcWorkflowPanel(tc.id);
+          });
+          const items = await Promise.all(
+            testCases.map(async (tc) => {
+              if (!tc.images.length) {
+                throw new Error(`${tc.title} has no evidence images.`);
+              }
+              defaultUnsetStatusToPass(tc);
+              return {
+                testcaseName: tc.title,
+                status: workflowStatusForUpload(tc.status),
+                evidencePngDataUrl: await composeEvidenceImage(tc),
+              };
+            }),
+          );
+          saveState();
+          renderCards();
+
+          const response = await fetch(`${WORKFLOW_SERVICE_URL}/workflow/start`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              testExecutionSummary: summary,
+              mode,
+              browserMode: workflowState.browserMode,
+              items,
+            }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || `Workflow failed to start (${response.status}).`);
+          }
+
+          const startedRun = {
+            ...queuedRun,
+            runId: data.runId,
+            status: data.status || "queued",
+            message: data.message || "Workflow queued.",
+          };
+          testCases.forEach((tc) => {
+            workflowState.workflowRunsByTcId.set(tc.id, {
+              testcaseName: tc.title,
+              run: {
+                ...startedRun,
+                payloadSummary: { ...startedRun.payloadSummary, itemCount: 1 },
+              },
+              logsExpanded: false,
+            });
+            renderTcWorkflowPanel(tc.id);
+          });
+          if (options.awaitCompletion) {
+            return waitForWorkflowRunFinal(data.runId, options);
+          }
+          pollWorkflowRun(data.runId, options);
+        }
+
+        function pollWorkflowRun(runId, options = {}) {
+          if (workflowState.pollingTimersByRunId.has(runId)) {
+            clearInterval(workflowState.pollingTimersByRunId.get(runId));
+          }
+
+          const poll = async () => {
+            try {
+              const response = await fetch(
+                `${WORKFLOW_SERVICE_URL}/workflow/${encodeURIComponent(runId)}`,
+                { cache: "no-store" },
+              );
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.error || "Workflow status failed.");
+              renderWorkflowRun(data, options);
+              if (["success", "failed", "partial"].includes(data.status)) {
+                clearInterval(workflowState.pollingTimersByRunId.get(runId));
+                workflowState.pollingTimersByRunId.delete(runId);
+              }
+            } catch (error) {
+              clearInterval(workflowState.pollingTimersByRunId.get(runId));
+              workflowState.pollingTimersByRunId.delete(runId);
+              markWorkflowRunFailed(runId, error.message);
+            }
+          };
+
+          poll();
+          workflowState.pollingTimersByRunId.set(runId, setInterval(poll, 1800));
+        }
+
+        async function waitForWorkflowRunFinal(runId, options = {}) {
+          while (true) {
+            try {
+              const response = await fetch(
+                `${WORKFLOW_SERVICE_URL}/workflow/${encodeURIComponent(runId)}`,
+                { cache: "no-store" },
+              );
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.error || "Workflow status failed.");
+              renderWorkflowRun(data, options);
+              if (["success", "failed", "partial"].includes(data.status)) {
+                return data;
+              }
+            } catch (error) {
+              markWorkflowRunFailed(runId, error.message);
+              return { runId, status: "failed", message: error.message };
+            }
+            await delay(1800);
+          }
+        }
+
+        function renderWorkflowRun(run, options = {}) {
+          const updatedTcIds = [];
+          let uploadedChanged = false;
+          workflowState.workflowRunsByTcId.forEach((runState, tcId) => {
+            if (runState.run?.runId !== run.runId) return;
+            runState.run = {
+              ...run,
+              logs: filterWorkflowLogsForTc(run.logs, runState.testcaseName),
+              results: filterWorkflowResultsForTc(
+                run.results,
+                runState.testcaseName,
+              ),
+              payloadSummary: {
+                ...(run.payloadSummary || {}),
+                itemCount: 1,
+              },
+            };
+            uploadedChanged =
+              markTcUploadedFromWorkflowResult(tcId, runState) ||
+              uploadedChanged;
+            updatedTcIds.push(tcId);
+          });
+          if (uploadedChanged) {
+            saveState();
+            renderCards();
+          } else {
+            updatedTcIds.forEach(renderTcWorkflowPanel);
+          }
+          if (!options.suppressFinalToast) {
+            if (run.status === "success") toast("Xray workflow completed.");
+            if (run.status === "partial") toast("Xray workflow finished with failures.");
+            if (run.status === "failed") toast(run.message || "Xray workflow failed.");
+          }
+        }
+
+        function markTcUploadedFromWorkflowResult(tcId, runState) {
+          const tc = getTc(tcId);
+          if (!tc || tc.xrayUploaded) return false;
+          const expected = cleanText(runState.testcaseName);
+          const results = Array.isArray(runState.run?.results)
+            ? runState.run.results
+            : [];
+          const succeeded = results.some(
+            (result) =>
+              runState.run?.status === "success" &&
+              result?.status === "success" &&
+              cleanText(result?.testcaseName) === expected,
+          );
+          if (!succeeded) return false;
+
+          tc.xrayUploaded = true;
+          const ws = activeWorkspace();
+          if (ws) {
+            ws.updatedAt = nowIso();
+            ws.remoteStatus = "modified";
+          }
+          return true;
+        }
+
+        function markWorkflowRunFailed(runId, message) {
+          const failedTcIds = [];
+          workflowState.workflowRunsByTcId.forEach((runState, tcId) => {
+            if (runState.run?.runId !== runId) return;
+            runState.run = {
+              ...runState.run,
+              status: "failed",
+              message,
+              logs: [
+                ...(Array.isArray(runState.run.logs) ? runState.run.logs : []),
+                {
+                  time: nowIso(),
+                  level: "error",
+                  testcaseName: "",
+                  message,
+                },
+              ],
+            };
+            failedTcIds.push(tcId);
+          });
+          failedTcIds.forEach(renderTcWorkflowPanel);
+        }
+
+        function markTcWorkflowFailed(tc, message) {
+          workflowState.workflowRunsByTcId.set(tc.id, {
+            testcaseName: tc.title,
+            run: {
+              status: "failed",
+              message,
+              payloadSummary: {
+                mode: "single",
+                browserMode: workflowState.browserMode,
+                itemCount: 1,
+              },
+              results: [
+                {
+                  testcaseName: tc.title,
+                  status: "failed",
+                  error: message,
+                },
+              ],
+              logs: [
+                {
+                  time: nowIso(),
+                  level: "error",
+                  testcaseName: tc.title,
+                  message,
+                },
+              ],
+            },
+            logsExpanded: false,
+          });
+          renderTcWorkflowPanel(tc.id);
+        }
+
+        function filterWorkflowLogsForTc(logs, testcaseName) {
+          const expected = cleanText(testcaseName);
+          return (Array.isArray(logs) ? logs : []).filter((log) => {
+            const logTestcase = cleanText(log?.testcaseName);
+            return !logTestcase || logTestcase === expected;
+          });
+        }
+
+        function filterWorkflowResultsForTc(results, testcaseName) {
+          const expected = cleanText(testcaseName);
+          return (Array.isArray(results) ? results : []).filter(
+            (result) => cleanText(result?.testcaseName) === expected,
+          );
+        }
+
+        function workflowStatusText(tc, runState) {
+          if (!tc.images?.length) {
+            return "No screenshots saved for this TC yet. Add evidence before starting workflow.";
+          }
+          if (!workflowState.summary) {
+            return "Open Settings and save the Xray test execution summary once for this workspace.";
+          }
+          if (workflowState.queueActive) {
+            return "All-evidence upload queue is running one test case at a time.";
+          }
+          if (runState?.run) {
+            const run = runState.run;
+            const results = Array.isArray(run.results) ? run.results : [];
+            const uploaded = results.filter((item) => item.status === "success").length;
+            const total =
+              Number(run.payloadSummary?.itemCount || 0) || Math.max(results.length, 1);
+            const resultText = results.length ? ` ${uploaded}/${total} uploaded.` : "";
+            return `${run.message || "Workflow running."}${resultText}`;
+          }
+          return workflowState.serviceAvailable
+            ? "Workflow service is ready."
+            : "Local workflow service is unavailable. Run npm run evidence:workflow from the repo.";
+        }
+
+        function workflowStatusClass(tc, runState) {
+          if (!tc.images?.length || !workflowState.summary) return "";
+          const status = runState?.run?.status || "";
+          if (status === "success") return " success";
+          if (status === "failed" || status === "partial") return " error";
+          if (status === "queued" || status === "running") return " running";
+          return workflowState.serviceAvailable ? " success" : " error";
+        }
+
+        function workflowRunHtml(tc, runState) {
+          const run = runState?.run;
+          if (!run) return "";
+
+          const status = run.status || "queued";
+          const final = ["success", "partial", "failed"].includes(status);
+          const results = Array.isArray(run.results) ? run.results : [];
+          const logs = Array.isArray(run.logs) ? run.logs : [];
+          const latestLog = logs[logs.length - 1];
+          const uploaded = results.filter((item) => item.status === "success").length;
+          const total =
+            Number(run.payloadSummary?.itemCount || 0) || Math.max(results.length, 1);
+          const browserMode = normalizeBrowserMode(
+            run.payloadSummary?.browserMode || workflowState.browserMode,
+          );
+          const expanded = Boolean(runState.logsExpanded);
+          const popupClass = [
+            "workflow-run-popup visible",
+            final ? "final" : "",
+            status === "failed" ? "failed" : "",
+            status === "partial" ? "partial" : "",
+            expanded ? "expanded" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          return `<div class="${popupClass}" aria-live="polite">
+          <div class="workflow-run-head">
+            <div class="workflow-spinner" aria-hidden="true"></div>
+            <div class="workflow-run-main">
+              <div class="workflow-run-title">Workflow ${escapeHtml(status)}</div>
+              <div class="workflow-run-meta">${uploaded}/${total} uploaded - ${browserMode}</div>
+              <div class="workflow-run-latest">${
+                latestLog
+                  ? `${latestLog.testcaseName ? `${escapeHtml(latestLog.testcaseName)}: ` : ""}${escapeHtml(latestLog.message || "")}`
+                  : escapeHtml(run.message || "Waiting for workflow logs.")
+              }</div>
+            </div>
+          </div>
+          <button class="workflow-log-toggle small ghost" data-action="toggle-workflow-logs" data-tc="${tc.id}" type="button">
+            ${expanded ? `Hide workflow logs (${logs.length})` : `Show workflow logs (${logs.length})`}
+          </button>
+          <div class="workflow-log-list">${
+            logs.length
+              ? logs.map(renderWorkflowLogEntry).join("")
+              : `<div class="workflow-log-entry"><span class="workflow-log-time">--:--:--</span> Waiting for Playwright updates.</div>`
+          }</div>
+        </div>`;
+        }
+
+        function renderWorkflowPanels() {
+          els.cards
+            .querySelectorAll("[data-workflow-panel]")
+            .forEach((panel) => renderTcWorkflowPanel(panel.dataset.workflowPanel));
+        }
+
+        function renderTcWorkflowPanel(tcId) {
+          const tc = getTc(tcId);
+          const panel = els.cards.querySelector(
+            `[data-workflow-panel="${cssEscape(tcId)}"]`,
+          );
+          if (!tc || !panel) return;
+          panel.outerHTML = workflowPanelHtml(tc);
+          const updatedPanel = els.cards.querySelector(
+            `[data-workflow-panel="${cssEscape(tcId)}"]`,
+          );
+          if (updatedPanel) bindWorkflowPanelEvents(updatedPanel);
+        }
+
+        function renderWorkflowLogEntry(log) {
+          const time = formatLogTime(log.time);
+          const level = ["info", "warn", "error"].includes(log.level)
+            ? log.level
+            : "info";
+          const testcase = log.testcaseName
+            ? `<strong>${escapeHtml(log.testcaseName)}</strong> `
+            : "";
+          return `<div class="workflow-log-entry ${level}"><span class="workflow-log-time">${time}</span> ${testcase}${escapeHtml(log.message || "")}</div>`;
+        }
+
+        function formatLogTime(value) {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return "--:--:--";
+          return date.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+        }
+
+        async function deleteImage(tcId, index) {
+          const tc = getTc(tcId);
+          if (!tc) return;
+          const [removed] = tc.images.splice(index, 1);
+          if (removed) await deleteImageData(removed);
+          const ws = activeWorkspace();
+          if (ws) {
+            ws.updatedAt = nowIso();
+            ws.remoteStatus = "modified";
+          }
+          saveState();
+          render();
+        }
+
+        function moveImage(tcId, index, direction) {
+          const tc = getTc(tcId);
+          const target = index + direction;
+          if (!tc || target < 0 || target >= tc.images.length) return;
+
+          const [image] = tc.images.splice(index, 1);
+          tc.images.splice(target, 0, image);
+          const ws = activeWorkspace();
+          if (ws) {
+            ws.updatedAt = nowIso();
+            ws.remoteStatus = "modified";
+          }
+          saveState();
+          render();
+        }
+
+        function updateActualResult(tcId, value) {
+          const tc = getTc(tcId);
+          if (!tc) return;
+          tc.actualResult = value;
+          const ws = activeWorkspace();
+          if (ws) {
+            ws.updatedAt = nowIso();
+            ws.remoteStatus = "modified";
+          }
+          saveState();
+        }
+
+        function updateStatus(tcId, status, checked) {
+          const tc = getTc(tcId);
+          if (!tc) return;
+          tc.status = checked ? normalizeStatus(status) : "unset";
+          const ws = activeWorkspace();
+          if (ws) {
+            ws.updatedAt = nowIso();
+            ws.remoteStatus = "modified";
+          }
+          saveState();
+          render();
+        }
+
+        function updateXrayUploaded(tcId, checked) {
+          const tc = getTc(tcId);
+          if (!tc) return;
+          tc.xrayUploaded = Boolean(checked);
+          const ws = activeWorkspace();
+          if (ws) {
+            ws.updatedAt = nowIso();
+            ws.remoteStatus = "modified";
+          }
+          saveState();
+          render();
+        }
+
+        function updateImageNote(tcId, index, value) {
+          const image = getTc(tcId)?.images[index];
+          if (!image) return;
+          image.note = value;
+          const ws = activeWorkspace();
+          if (ws) {
+            ws.updatedAt = nowIso();
+            ws.remoteStatus = "modified";
+          }
+          saveState();
+        }
+
+        function updateMarkdownPreview(type, tcId, index, value) {
+          const selector =
+            type === "image-note"
+              ? `[data-markdown-preview="image-note"][data-tc="${cssEscape(tcId)}"][data-index="${index}"]`
+              : `[data-markdown-preview="actual-result"][data-tc="${cssEscape(tcId)}"]`;
+          const preview = els.cards.querySelector(selector);
+          if (preview) preview.innerHTML = renderMarkdownPreview(value);
+        }
+
+        async function clearTcImages(tcId) {
+          const tc = getTc(tcId);
+          if (!tc || !confirm(`Clear all saved evidence for ${tcId}?`)) return;
+          await Promise.all((tc.images || []).map(deleteImageData));
+          tc.images = [];
+          const ws = activeWorkspace();
+          if (ws) {
+            ws.updatedAt = nowIso();
+            ws.remoteStatus = "modified";
+          }
+          saveState();
+          render();
+        }
+
+        async function clearActiveWorkspace() {
+          const workspace = activeWorkspace();
+          if (!workspace) return;
+
+          const removeWholeWorkspace = confirm(
+            `Remove workspace "${workspace.name}" and all saved evidence?`,
+          );
+          if (!removeWholeWorkspace) return;
+
+          await deleteWorkspaceImages(workspace);
+          state.workspaces = state.workspaces.filter(
+            (item) => item.id !== workspace.id,
+          );
+          state.activeWorkspaceId = state.workspaces[0]?.id || "";
+          loadWorkflowSettings();
+          saveState();
+          render();
+        }
+
+        function createBlankWorkspace() {
+          const name = prompt(
+            "Workspace name:",
+            `Evidence ${new Date().toISOString().slice(0, 10)}`,
+          );
+          if (!name) return;
+          const workspace = createWorkspace(name);
+          loadWorkflowSettings();
+          saveState();
+          render();
+          toast(`Created ${workspace.name}`);
+        }
+
+        async function exportWorkspaceJson() {
+          const workspace = activeWorkspace();
+          if (!workspace) {
+            toast("No workspace to export.");
+            return;
+          }
+
+          const portableWorkspace = await hydrateWorkspaceForExport(workspace);
+          downloadJson(`${safeFileName(workspace.name)}-evidence.json`, {
+            app: SERVICE_NAME,
+            version: 1,
+            exportedAt: nowIso(),
+            workspace: portableWorkspace,
+          });
+        }
+
+        async function importWorkspaceJson(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          try {
+            const payload = JSON.parse(await file.text());
+            const workspace = normalizeImportedWorkspace(
+              payload.workspace || payload,
+            );
+            await persistWorkspaceImageData(workspace);
+            // mark imported workspace as modified locally until explicitly synced
+            workspace.remoteStatus = workspace.remoteStatus || "modified";
+            workspace.remoteSyncedAt = workspace.remoteSyncedAt || null;
+            const existingIndex = state.workspaces.findIndex(
+              (item) => item.id === workspace.id,
+            );
+
+            if (existingIndex >= 0) {
+              const replace = confirm(
+                `Workspace "${workspace.name}" already exists. Replace it?`,
+              );
+              if (!replace) return;
+              await deleteWorkspaceImages(state.workspaces[existingIndex]);
+              state.workspaces[existingIndex] = workspace;
+            } else {
+              state.workspaces.unshift(workspace);
+            }
+
+            state.activeWorkspaceId = workspace.id;
+            loadWorkflowSettings();
+            saveState();
+            render();
+            toast(`Imported ${workspace.name}`);
+          } catch (error) {
+            toast(`Import failed: ${error.message}`);
+          } finally {
+            event.target.value = "";
+          }
+        }
+
+        function exportSummaryMarkdown() {
+          const workspace = activeWorkspace();
+          if (!workspace) {
+            toast("No workspace to summarize.");
+            return;
+          }
+
+          const lines = [
+            `# Xray Evidence Summary - ${workspace.name}`,
+            "",
+            `- Source: ${workspace.sourceName || "Not loaded"}`,
+            `- Exported: ${new Date().toLocaleString()}`,
+            "",
+          ];
+
+          workspace.testCases.forEach((tc) => {
+            lines.push(`## ${tc.id}: ${tc.title}`);
+            lines.push(`- Status: ${normalizeStatus(tc.status)}`);
+            if (tc.relatedAc) lines.push(`- Related AC: ${tc.relatedAc}`);
+            if (tc.summary) lines.push(`- Summary: ${tc.summary}`);
+            if (tc.precondition)
+              lines.push(`- Preconditions: ${tc.precondition}`);
+            if (Array.isArray(tc.steps) && tc.steps.length) {
+              lines.push("", "### Steps");
+              tc.steps.forEach((step, index) =>
+                lines.push(`${index + 1}. ${step}`),
+              );
+            }
+            if (tc.expectedResult)
+              lines.push("", `### Expected Result`, tc.expectedResult);
+            if (tc.actualResult)
+              lines.push("", `### Actual Result`, tc.actualResult);
+            const notedImages = tc.images
+              .map((image, index) => ({ index, note: normalizeMarkupText(image.note) }))
+              .filter((image) => image.note);
+            if (notedImages.length) {
+              lines.push("", "### Screenshot Notes");
+              notedImages.forEach((image) =>
+                lines.push(`${image.index + 1}. ${image.note}`),
+              );
+            }
+            lines.push(`- Evidence images: ${tc.images.length}`, "");
+          });
+
+          downloadText(
+            `${safeFileName(workspace.name)}-evidence-summary.md`,
+            lines.join("\n"),
+            "text/markdown",
+          );
+        }
+
+        function downloadTcJson(tcId) {
+          const workspace = activeWorkspace();
+          const tc = getTc(tcId);
+          if (!workspace || !tc) return;
+          downloadJson(`${safeFileName(workspace.name)}-${tc.id}.json`, {
+            app: SERVICE_NAME,
+            version: 1,
+            exportedAt: nowIso(),
+            workspaceName: workspace.name,
+            sourceName: workspace.sourceName,
+            testCase: tc,
+          });
+        }
+
+        async function composeEvidenceImage(tc) {
+          const images = await Promise.all(
+            tc.images.map(async (evidence, index) => ({
+              evidence,
+              index,
+              image: await loadImage(await ensureImageDataUrl(evidence)),
+            })),
+          );
+          const width = Math.max(
+            960,
+            ...images.map((item) => item.image.width),
+          );
+          const padding = 28;
+          const gap = 18;
+          const titleFont = "700 24px Segoe UI, sans-serif";
+          const titleLineHeight = 28;
+          const titleLines = wrapTextForCanvas(
+            `${tc.id}: ${tc.title}`,
+            width - padding * 2,
+            titleFont,
+          );
+          const extraTitleHeight =
+            Math.max(0, titleLines.length - 1) * titleLineHeight;
+          const headerHeight = 76 + extraTitleHeight;
+          const actualResultBlock = markdownCanvasNoteBlock(
+            tc.actualResult || "",
+            width - padding * 2,
+            "Actual Result",
+          );
+          const scaled = images.map((item) => {
+            const scale = Math.min(1, (width - padding * 2) / item.image.width);
+            const noteBlock = markdownCanvasNoteBlock(
+              item.evidence.note || "",
+              width - padding * 2,
+              `Note ${item.index + 1}`,
+            );
+            return {
+              ...item,
+              width: Math.round(item.image.width * scale),
+              height: Math.round(item.image.height * scale),
+              noteBlock,
+            };
+          });
+          const height =
+            headerHeight +
+            padding +
+            actualResultBlock.height +
+            scaled.reduce(
+              (sum, item) => sum + item.noteBlock.height + item.height + gap,
+              0,
+            );
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+
+          canvas.width = width;
+          canvas.height = height;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, width, height);
+          ctx.fillStyle = "#172033";
+          ctx.font = titleFont;
+          titleLines.forEach((line, index) => {
+            ctx.fillText(line, padding, 38 + index * titleLineHeight);
+          });
+          ctx.fillStyle = "#667085";
+          ctx.font = "14px Segoe UI, sans-serif";
+          ctx.fillText(
+            `${tc.images.length} evidence image${tc.images.length === 1 ? "" : "s"}`,
+            padding,
+            62 + extraTitleHeight,
+          );
+
+          let y = headerHeight;
+          if (actualResultBlock.height) {
+            y = drawMarkdownCanvasNoteBlock(ctx, actualResultBlock, padding, y);
+          }
+          scaled.forEach((item) => {
+            if (item.noteBlock.height) {
+              y = drawMarkdownCanvasNoteBlock(ctx, item.noteBlock, padding, y);
+            }
+            ctx.drawImage(item.image, padding, y, item.width, item.height);
+            y += item.height + gap;
+          });
+
+          return canvas.toDataURL("image/png");
+        }
+
+        async function composeSingleEvidenceImage(evidence, index) {
+          const image = await loadImage(await ensureImageDataUrl(evidence));
+          const width = Math.max(900, image.width);
+          const padding = 24;
+          const noteBlock = markdownCanvasNoteBlock(
+            evidence.note || "",
+            width - padding * 2,
+            `Note ${index + 1}`,
+          );
+          const scale = Math.min(1, (width - padding * 2) / image.width);
+          const imageWidth = Math.round(image.width * scale);
+          const imageHeight = Math.round(image.height * scale);
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+
+          canvas.width = width;
+          canvas.height = padding + noteBlock.height + imageHeight + padding;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          let y = padding;
+          if (noteBlock.height) {
+            y = drawMarkdownCanvasNoteBlock(ctx, noteBlock, padding, y);
+          }
+          ctx.drawImage(image, padding, y, imageWidth, imageHeight);
+          return canvas.toDataURL("image/png");
+        }
+
+        async function buildSeparateEvidenceClipboardItems(tc) {
+          const actualResult = cleanText(tc.actualResult);
+          return Promise.all(
+            (tc.images || []).map(async (image, index) => {
+              const note = cleanText(image.note);
+              const dataUrl = note
+                ? await composeSingleEvidenceImage(image, index)
+                : await ensureImageDataUrl(image);
+              const blob = await (await fetch(dataUrl)).blob();
+              const plainText = separateEvidencePlainText({
+                actualResult: index === 0 ? actualResult : "",
+                note,
+                index,
+              });
+              const item = { [blob.type || "image/png"]: blob };
+
+              if (plainText) {
+                item["text/plain"] = new Blob([plainText], {
+                  type: "text/plain",
+                });
+              }
+
+              return new ClipboardItem(item);
+            }),
+          );
+        }
+
+        function separateEvidencePlainText({ actualResult, note, index }) {
+          return [
+            actualResult ? `Actual Result:\n${actualResult}` : "",
+            note ? `Note ${index + 1}:\n${note}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n");
+        }
+
+        async function copyClipboardItems(items) {
+          if (!navigator.clipboard || !window.ClipboardItem) {
+            throw new Error(
+              "Clipboard image writing is not supported in this browser.",
+            );
+          }
+
+          await navigator.clipboard.write(items);
+        }
+
+        async function copyDataUrlToClipboard(dataUrl, plainText = "") {
+          if (!navigator.clipboard || !window.ClipboardItem) {
+            throw new Error(
+              "Clipboard image writing is not supported in this browser.",
+            );
+          }
+          const blob = await (await fetch(dataUrl)).blob();
+          const item = { [blob.type || "image/png"]: blob };
+          if (plainText) {
+            item["text/plain"] = new Blob([plainText], { type: "text/plain" });
+          }
+          await navigator.clipboard.write([new ClipboardItem(item)]);
+        }
+
+        function loadState() {
+          try {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+            return {
+              activeWorkspaceId: saved.activeWorkspaceId || "",
+              workspaces: Array.isArray(saved.workspaces)
+                ? saved.workspaces.map(normalizeImportedWorkspace)
+                : [],
+            };
+          } catch {
+            return { activeWorkspaceId: "", workspaces: [] };
+          }
+        }
+
+        function saveState() {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+          } catch {
+            toast(
+              "Browser storage is full. Export evidence, then remove older workspaces.",
+            );
+          }
+        }
+
+        function serializeState() {
+          return {
+            activeWorkspaceId: state.activeWorkspaceId,
+            workspaces: state.workspaces.map((workspace) => ({
+              ...workspace,
+              testCases: workspace.testCases.map((tc) => ({
+                ...tc,
+                images: (tc.images || []).map((image) => ({
+                  id: image.id,
+                  storageKey: image.storageKey,
+                  note: image.note || "",
+                  createdAt: image.createdAt || nowIso(),
+                })),
+              })),
+            })),
+          };
+        }
+
+        async function initializeStoredImages() {
+          await hydrateStoredImages();
+          saveState();
+        }
+
+        async function hydrateStoredImages() {
+          for (const workspace of state.workspaces) {
+            await persistWorkspaceImageData(workspace);
+          }
+        }
+
+        async function persistWorkspaceImageData(workspace) {
+          for (const tc of workspace.testCases || []) {
+            for (const image of tc.images || []) {
+              if (image.dataUrl) {
+                await saveImageData(workspace.id, tc.id, image, image.dataUrl);
+              } else if (image.storageKey) {
+                image.dataUrl = await readImageDataUrl(image.storageKey);
+              }
+            }
+          }
+        }
+
+        async function hydrateWorkspaceForExport(workspace) {
+          await persistWorkspaceImageData(workspace);
+          return {
+            ...workspace,
+            testCases: workspace.testCases.map((tc) => ({
+              ...tc,
+              images: (tc.images || []).map((image) => ({
+                id: image.id,
+                dataUrl: image.dataUrl || "",
+                note: image.note || "",
+                createdAt: image.createdAt || nowIso(),
+              })),
+            })),
+          };
+        }
+
+        async function hydrateWorkspacesForExport(workspaces) {
+          return Promise.all(workspaces.map(hydrateWorkspaceForExport));
+        }
+
+        async function saveImageData(workspaceId, tcId, image, dataUrl) {
+          const key =
+            image.storageKey ||
+            `${workspaceId}/${tcId}/${image.id || cryptoId()}`;
+          const blob = await dataUrlToBlob(dataUrl);
+          const db = await openImageDb();
+          await idbRequest(
+            db
+              .transaction(IMAGE_STORE_NAME, "readwrite")
+              .objectStore(IMAGE_STORE_NAME)
+              .put({
+                key,
+                workspaceId,
+                tcId,
+                imageId: image.id,
+                blob,
+                type: blob.type || "image/png",
+                savedAt: nowIso(),
+              }),
+          );
+          image.storageKey = key;
+          image.dataUrl = dataUrl;
+        }
+
+        async function readImageDataUrl(storageKey) {
+          const db = await openImageDb();
+          const record = await idbRequest(
+            db
+              .transaction(IMAGE_STORE_NAME, "readonly")
+              .objectStore(IMAGE_STORE_NAME)
+              .get(storageKey),
+          );
+          return record?.blob ? blobToDataUrl(record.blob) : "";
+        }
+
+        async function ensureImageDataUrl(image) {
+          if (image?.dataUrl) return image.dataUrl;
+          if (!image?.storageKey) throw new Error("Evidence image data is missing.");
+          image.dataUrl = await readImageDataUrl(image.storageKey);
+          if (!image.dataUrl) throw new Error("Evidence image data is missing.");
+          return image.dataUrl;
+        }
+
+        async function deleteImageData(image) {
+          if (!image?.storageKey) return;
+          const db = await openImageDb();
+          await idbRequest(
+            db
+              .transaction(IMAGE_STORE_NAME, "readwrite")
+              .objectStore(IMAGE_STORE_NAME)
+              .delete(image.storageKey),
+          );
+        }
+
+        async function deleteWorkspaceImages(workspace) {
+          const images = (workspace.testCases || []).flatMap(
+            (tc) => tc.images || [],
+          );
+          await Promise.all(images.map(deleteImageData));
+        }
+
+        function openImageDb() {
+          return new Promise((resolve, reject) => {
+            const request = indexedDB.open(IMAGE_DB_NAME, 1);
+            request.onupgradeneeded = () => {
+              const db = request.result;
+              if (!db.objectStoreNames.contains(IMAGE_STORE_NAME)) {
+                db.createObjectStore(IMAGE_STORE_NAME, { keyPath: "key" });
+              }
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+        }
+
+        function idbRequest(request) {
+          return new Promise((resolve, reject) => {
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+        }
+
+        // GitHub Gist settings and sync helpers
+        function loadGistSettings() {
+          try {
+            const saved = JSON.parse(
+              localStorage.getItem(STORAGE_KEY + "-gist") || "{}",
+            );
+            els.githubUsername.value = saved.username || "";
+            els.githubToken.value = saved.token || "";
+            els.gistId.value = saved.gistId || "";
+          } catch (e) {
+            /* ignore */
+          }
+          // start periodic sync if configured
+          try { startPeriodicSync(); } catch (e) { /* ignore */ }
+        }
+
+        async function saveGistSettings() {
+          const username = els.githubUsername?.value?.trim() || "";
+          const token = els.githubToken?.value?.trim() || "";
+
+          if (!username || !token) {
+            toast("Please provide GitHub username and token");
+            return;
+          }
+
+          let gistId = els.gistId?.value?.trim() || "";
+
+          // Create gist if not already created
+          if (!gistId) {
+            try {
+              toast("Creating Gist...");
+              const createResp = await fetch("https://api.github.com/gists", {
+                method: "POST",
+                headers: {
+                  Authorization: `token ${token}`,
+                  "Content-Type": "application/json",
+                  Accept: "application/vnd.github.v3+json",
+                },
+                body: JSON.stringify({
+                  description: "Xray Evidence Workspaces",
+                  public: false,
+                  files: {
+                    "workspaces.json": {
+                      content: JSON.stringify({ workspaces: [] }),
+                    },
+                  },
+                }),
+              });
+
+              if (!createResp.ok) {
+                const err = await createResp.text();
+                throw new Error(
+                  `Failed to create gist: ${createResp.status} ${err}`,
+                );
+              }
+
+              const gistData = await createResp.json();
+              gistId = gistData.id;
+              els.gistId.value = gistId;
+              toast("Gist created successfully!");
+            } catch (err) {
+              showError(err);
+              return;
+            }
+          }
+
+          const payload = {
+            username,
+            token,
+            gistId,
+          };
+          localStorage.setItem(STORAGE_KEY + "-gist", JSON.stringify(payload));
+          try { startPeriodicSync(); } catch (e) { /* ignore */ }
+          toast("GitHub Gist settings saved.");
+        }
+
+        function exportGistSettings() {
+          const username = els.githubUsername?.value?.trim() || "";
+          const gistId = els.gistId?.value?.trim() || "";
+          const token = els.githubToken?.value?.trim() || "";
+
+          if (!username && !gistId && !token) {
+            toast("No GitHub Gist settings to export.");
+            return;
+          }
+
+          const settings = { username, gistId };
+          if (els.includeGistTokenExport?.checked && token) {
+            settings.token = token;
+          }
+
+          downloadJson("github-gist-sync-settings.json", {
+            app: SERVICE_NAME,
+            type: "github-gist-sync-settings",
+            version: 1,
+            exportedAt: nowIso(),
+            settings,
+          });
+
+          toast(
+            settings.token
+              ? "Exported Gist settings with token."
+              : "Exported Gist settings without token.",
+          );
+        }
+
+        async function importGistSettings(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          try {
+            const payload = JSON.parse(await file.text());
+            const settings = normalizeGistSettingsImport(payload);
+            if (settings.username !== undefined)
+              els.githubUsername.value = settings.username;
+            if (settings.gistId !== undefined) els.gistId.value = settings.gistId;
+            if (settings.token !== undefined)
+              els.githubToken.value = settings.token;
+            toast("Imported Gist settings. Click Save Settings to apply.");
+          } catch (error) {
+            toast(`Gist settings import failed: ${error.message}`);
+          } finally {
+            event.target.value = "";
+          }
+        }
+
+        function normalizeGistSettingsImport(payload) {
+          const settings = payload?.settings || payload;
+          if (!settings || typeof settings !== "object") {
+            throw new Error("Invalid Gist settings file.");
+          }
+
+          const hasUsername = Object.prototype.hasOwnProperty.call(
+            settings,
+            "username",
+          );
+          const hasGistId =
+            Object.prototype.hasOwnProperty.call(settings, "gistId") ||
+            Object.prototype.hasOwnProperty.call(settings, "id");
+          const hasToken = Object.prototype.hasOwnProperty.call(
+            settings,
+            "token",
+          );
+
+          const result = {};
+          if (hasUsername) result.username = cleanText(settings.username);
+          if (hasGistId)
+            result.gistId = cleanText(settings.gistId || settings.id);
+          if (hasToken) result.token = cleanText(settings.token);
+
+          if (!result.username && !result.gistId && !result.token) {
+            throw new Error("No Gist settings found.");
+          }
+
+          return result;
+        }
+
+        function gistAuthHeaders() {
+          const token = els.githubToken?.value?.trim();
+          const hdr = {
+            "Content-Type": "application/json",
+            Accept: "application/vnd.github.v3+json",
+          };
+          if (token) hdr["Authorization"] = `token ${token}`;
+          return hdr;
+        }
+
+        function startPeriodicSync() {
+          try {
+            stopPeriodicSync();
+            const gistId = (els.gistId?.value || "").trim();
+            if (!gistId) return;
+            periodicSyncTimer = setInterval(() => {
+              syncFromGist({ silent: true }).catch((e) => console.warn(e));
+            }, AUTO_SYNC_INTERVAL_MS);
+          } catch (e) {
+            console.warn("startPeriodicSync failed", e);
+          }
+        }
+
+        function stopPeriodicSync() {
+          if (periodicSyncTimer) {
+            clearInterval(periodicSyncTimer);
+            periodicSyncTimer = null;
+          }
+        }
+
+        async function syncFromGist(options = {}) {
+          const silent = Boolean(options.silent);
+          const gistId = (els.gistId?.value || "").trim();
+
+          if (!gistId) {
+            if (!silent) toast("Configure GitHub Gist ID in settings");
+            return;
+          }
+
+          try {
+            const resp = await fetch(`https://api.github.com/gists/${gistId}`, {
+              headers: gistAuthHeaders(),
+            });
+
+            if (!resp.ok) {
+              throw new Error(
+                `Failed to fetch gist: ${resp.status} ${resp.statusText}`,
+              );
+            }
+
+            const gistData = await resp.json();
+            const wsFile = gistData.files["workspaces.json"];
+            if (!wsFile) {
+              if (!silent)
+                toast(
+                  "Gist does not contain workspaces.json file. Create one first.",
+                );
+              return;
+            }
+
+            const fileText = await loadGistFileContent(wsFile);
+            const content = JSON.parse(fileText);
+            const remoteWorkspaces = Array.isArray(content.workspaces)
+              ? content.workspaces
+              : [];
+
+            for (const remoteWs of remoteWorkspaces) {
+              const workspace = normalizeImportedWorkspace(remoteWs);
+              await persistWorkspaceImageData(workspace);
+              workspace.remoteSyncedAt = nowIso();
+              workspace.remoteCheckedAt = nowIso();
+              workspace.remoteStatus = "synced";
+              const existingIndex = state.workspaces.findIndex(
+                (w) => w.id === workspace.id,
+              );
+              if (existingIndex >= 0) {
+                await deleteWorkspaceImages(state.workspaces[existingIndex]);
+                state.workspaces[existingIndex] = workspace;
+              } else {
+                state.workspaces.unshift(workspace);
+              }
+            }
+
+            state.activeWorkspaceId = state.workspaces[0]?.id || "";
+            loadWorkflowSettings();
+            saveState();
+            render();
+            if (!silent) toast("Synced workspaces from Gist");
+          } catch (err) {
+            if (!silent) showError(err);
+            else console.warn(err);
+          }
+        }
+
+        async function loadGistFileContent(file) {
+          if (!file?.truncated) return file?.content || "";
+          if (!file.raw_url) {
+            throw new Error("Gist file is too large and has no raw URL.");
+          }
+
+          const rawResp = await fetch(file.raw_url);
+          if (!rawResp.ok) {
+            throw new Error(
+              `Failed to fetch full gist file: ${rawResp.status} ${rawResp.statusText}`,
+            );
+          }
+          return rawResp.text();
+        }
+
+        async function pushToGist() {
+          const gistId = (els.gistId?.value || "").trim();
+          const username = els.githubUsername?.value?.trim();
+
+          if (!gistId) {
+            toast("Configure GitHub Gist ID in settings first");
+            return;
+          }
+
+          if (!username) {
+            toast("Configure GitHub username in settings first");
+            return;
+          }
+
+          // Build preview of workspaces to be pushed
+          const preview = state.workspaces
+            .map((w) => `• ${w.name} (${w.id})`)
+            .join("\n");
+          const msg = `This will push all ${state.workspaces.length} workspace(s) to your Gist:\n\n${preview}\n\nProceed?`;
+
+          if (!confirm(msg)) {
+            toast("Push cancelled");
+            return;
+          }
+
+          try {
+            const fileContent = {
+              workspaces: await hydrateWorkspacesForExport(state.workspaces),
+            };
+
+            const patchResp = await fetch(
+              `https://api.github.com/gists/${gistId}`,
+              {
+                method: "PATCH",
+                headers: gistAuthHeaders(),
+                body: JSON.stringify({
+                  files: {
+                    "workspaces.json": {
+                      content: JSON.stringify(fileContent, null, 2),
+                    },
+                  },
+                }),
+              },
+            );
+
+            if (!patchResp.ok) {
+              const err = await patchResp.text();
+              throw new Error(
+                `Failed to update gist: ${patchResp.status} ${err}`,
+              );
+            }
+
+            state.workspaces.forEach((ws) => {
+              ws.remoteSyncedAt = nowIso();
+              ws.remoteCheckedAt = nowIso();
+              ws.remoteStatus = "synced";
+            });
+
+            saveState();
+            render();
+            toast(`Pushed ${state.workspaces.length} workspace(s) to Gist`);
+          } catch (err) {
+            showError(err);
+          }
+        }
+
+        function ensureActiveWorkspace() {
+          if (!state.workspaces.length) return;
+          if (
+            !state.workspaces.some(
+              (item) => item.id === state.activeWorkspaceId,
+            )
+          ) {
+            state.activeWorkspaceId = state.workspaces[0].id;
+          }
+        }
+
+        function createWorkspace(name) {
+          const workspace = {
+            id: cryptoId(),
+            name,
+            sourceName: "",
+            sourceType: "",
+            createdAt: nowIso(),
+            updatedAt: nowIso(),
+            testCases: [],
+            workflow: null,
+            remoteStatus: "modified",
+            remoteSyncedAt: null,
+          };
+          state.workspaces.unshift(workspace);
+          state.activeWorkspaceId = workspace.id;
+          return workspace;
+        }
+
+        function activeWorkspace() {
+          return (
+            state.workspaces.find(
+              (item) => item.id === state.activeWorkspaceId,
+            ) || null
+          );
+        }
+
+        function getTc(id) {
+          return activeWorkspace()?.testCases.find((tc) => tc.id === id);
+        }
+
+        function normalizeImportedWorkspace(input) {
+          if (!input || !Array.isArray(input.testCases))
+            throw new Error("Invalid evidence workspace.");
+          return {
+            id: input.id || cryptoId(),
+            name: input.name || "Imported Evidence",
+            sourceName: input.sourceName || "",
+            sourceType: input.sourceType || "",
+            createdAt: input.createdAt || nowIso(),
+            updatedAt: input.updatedAt || nowIso(),
+            remoteStatus: normalizeRemoteStatus(input.remoteStatus),
+            remoteSyncedAt: input.remoteSyncedAt || null,
+            remoteCheckedAt: input.remoteCheckedAt || null,
+            workflow: normalizeWorkflowSettings(input.workflow),
+            testCases: input.testCases
+              .map((tc) => ({
+                id: normalizeTcId(tc.id),
+                title: cleanText(tc.title || tc.summary || tc.id),
+                summary: cleanText(tc.summary),
+                relatedAc: cleanText(tc.relatedAc),
+                precondition: cleanText(tc.precondition || tc.preconditions),
+                steps: Array.isArray(tc.steps)
+                  ? tc.steps.map(cleanText).filter(Boolean)
+                  : splitSteps(tc.steps),
+                expectedResult: cleanText(
+                  tc.expectedResult || tc.expected || tc.expectedResults,
+                ),
+                actualResult: normalizeMarkupText(tc.actualResult),
+                status: normalizeStatus(tc.status),
+                xrayUploaded: Boolean(tc.xrayUploaded),
+                sourceLine: Number(tc.sourceLine) || 0,
+                images: Array.isArray(tc.images)
+                  ? tc.images
+                      .filter((image) => image.dataUrl || image.storageKey)
+                      .map((image) => ({
+                        id: image.id || cryptoId(),
+                        storageKey: image.storageKey || "",
+                        dataUrl: image.dataUrl,
+                        note: normalizeMarkupText(image.note),
+                        createdAt: image.createdAt || nowIso(),
+                      }))
+                  : [],
+              }))
+              .filter((tc) => tc.id),
+          };
+        }
+
+        function matchesQuery(tc, query) {
+          if (!query) return true;
+          return [
+            tc.id,
+            tc.title,
+            tc.summary,
+            tc.relatedAc,
+            tc.precondition,
+            ...(tc.steps || []),
+            tc.expectedResult,
+            tc.actualResult,
+            tc.status,
+            ...(tc.images || []).map((image) => image.note),
+            activeWorkspace()?.sourceName,
+          ]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(query));
+        }
+
+        function matchesEvidenceFilter(tc, filter) {
+          const hasEvidence = Boolean(tc.images?.length);
+          if (filter === "with") return hasEvidence;
+          if (filter === "without") return !hasEvidence;
+          if (filter === "uploaded") return Boolean(tc.xrayUploaded);
+          if (filter === "not-uploaded") return !tc.xrayUploaded;
+          return true;
+        }
+
+        function findHeader(headers, candidates) {
+          return headers.findIndex((header) => candidates.includes(header));
+        }
+
+        function normalizeStatus(value) {
+          const normalized = String(value || "").trim().toLowerCase();
+          return ["pass", "fail"].includes(normalized) ? normalized : "unset";
+        }
+
+        function workflowStatusForUpload(value) {
+          const status = normalizeStatus(value);
+          return status === "unset" ? "pass" : status;
+        }
+
+        function defaultUnsetStatusToPass(tc) {
+          if (normalizeStatus(tc.status) !== "unset") return;
+          tc.status = "pass";
+          const ws = activeWorkspace();
+          if (ws) {
+            ws.updatedAt = nowIso();
+            ws.remoteStatus = "modified";
+          }
+        }
+
+        function normalizeRemoteStatus(value) {
+          return ["synced", "modified"].includes(value) ? value : "";
+        }
+
+        function renderMarkdownPreview(value) {
+          const text = normalizeMarkupText(value);
+          if (!text) {
+            return `<p class="markdown-preview-empty">No preview</p>`;
+          }
+
+          const lines = text.replace(/\r\n?/g, "\n").split("\n");
+          const html = [];
+          let index = 0;
+
+          while (index < lines.length) {
+            const line = lines[index];
+            if (!line.trim()) {
+              index += 1;
+              continue;
+            }
+
+            const fence = line.match(/^\s*```/);
+            if (fence) {
+              const codeLines = [];
+              index += 1;
+              while (index < lines.length && !/^\s*```/.test(lines[index])) {
+                codeLines.push(lines[index]);
+                index += 1;
+              }
+              if (index < lines.length) index += 1;
+              html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+              continue;
+            }
+
+            const heading = line.match(/^(#{1,6})\s+(.+)$/);
+            if (heading) {
+              const level = heading[1].length;
+              html.push(`<h${level}>${formatMarkdownInline(heading[2])}</h${level}>`);
+              index += 1;
+              continue;
+            }
+
+            if (isMarkdownTableStart(lines, index)) {
+              const { tableHtml, nextIndex } = renderMarkdownTable(lines, index);
+              html.push(tableHtml);
+              index = nextIndex;
+              continue;
+            }
+
+            const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+            if (unordered) {
+              const items = [];
+              while (index < lines.length) {
+                const item = lines[index].match(/^\s*[-*+]\s+(.+)$/);
+                if (!item) break;
+                items.push(`<li>${formatMarkdownInline(item[1])}</li>`);
+                index += 1;
+              }
+              html.push(`<ul>${items.join("")}</ul>`);
+              continue;
+            }
+
+            const ordered = line.match(/^\s*\d+[\).]\s+(.+)$/);
+            if (ordered) {
+              const items = [];
+              while (index < lines.length) {
+                const item = lines[index].match(/^\s*\d+[\).]\s+(.+)$/);
+                if (!item) break;
+                items.push(`<li>${formatMarkdownInline(item[1])}</li>`);
+                index += 1;
+              }
+              html.push(`<ol>${items.join("")}</ol>`);
+              continue;
+            }
+
+            const paragraph = [line.trim()];
+            index += 1;
+            while (
+              index < lines.length &&
+              lines[index].trim() &&
+              !isMarkdownBlockStart(lines, index)
+            ) {
+              paragraph.push(lines[index].trim());
+              index += 1;
+            }
+            html.push(`<p>${formatMarkdownInline(paragraph.join("\n"))}</p>`);
+          }
+
+          return html.join("");
+        }
+
+        function isMarkdownBlockStart(lines, index) {
+          const line = lines[index] || "";
+          return (
+            /^\s*```/.test(line) ||
+            /^(#{1,6})\s+/.test(line) ||
+            /^\s*[-*+]\s+/.test(line) ||
+            /^\s*\d+[\).]\s+/.test(line) ||
+            isMarkdownTableStart(lines, index)
+          );
+        }
+
+        function isMarkdownTableStart(lines, index) {
+          return (
+            index + 1 < lines.length &&
+            splitMarkdownTableRow(lines[index]).length > 1 &&
+            isMarkdownTableSeparator(lines[index + 1])
+          );
+        }
+
+        function isMarkdownTableSeparator(line) {
+          const cells = splitMarkdownTableRow(line);
+          return (
+            cells.length > 1 &&
+            cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()))
+          );
+        }
+
+        function renderMarkdownTable(lines, index) {
+          const headers = splitMarkdownTableRow(lines[index]);
+          index += 2;
+          const rows = [];
+          while (
+            index < lines.length &&
+            lines[index].trim() &&
+            splitMarkdownTableRow(lines[index]).length > 1
+          ) {
+            rows.push(splitMarkdownTableRow(lines[index]));
+            index += 1;
+          }
+
+          const headerHtml = headers
+            .map((cell) => `<th>${formatMarkdownInline(cell)}</th>`)
+            .join("");
+          const bodyHtml = rows
+            .map(
+              (row) =>
+                `<tr>${headers
+                  .map((_, cellIndex) => `<td>${formatMarkdownInline(row[cellIndex] || "")}</td>`)
+                  .join("")}</tr>`,
+            )
+            .join("");
+          return {
+            tableHtml: `<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`,
+            nextIndex: index,
+          };
+        }
+
+        function splitMarkdownTableRow(line) {
+          return String(line || "")
+            .trim()
+            .replace(/^\|/, "")
+            .replace(/\|$/, "")
+            .split("|")
+            .map((cell) => cell.trim());
+        }
+
+        function formatMarkdownInline(value) {
+          const code = [];
+          let output = escapeHtml(value).replace(/`([^`]+)`/g, (_match, text) => {
+            const token = `\u0000CODE${code.length}\u0000`;
+            code.push(`<code>${text}</code>`);
+            return token;
+          });
+
+          output = output.replace(
+            /\[([^\]]+)\]\(([^)\s]+)\)/g,
+            (_match, label, href) => {
+              const safeHref = safeMarkdownHref(href);
+              return safeHref
+                ? `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`
+                : label;
+            },
+          );
+          output = output
+            .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+            .replace(/(^|[^\*])\*([^*]+)\*/g, "$1<em>$2</em>")
+            .replace(/\n/g, "<br>");
+
+          code.forEach((html, codeIndex) => {
+            output = output.replace(`\u0000CODE${codeIndex}\u0000`, html);
+          });
+          return output;
+        }
+
+        function safeMarkdownHref(value) {
+          const href = String(value || "").trim();
+          if (/^(https?:|mailto:|tel:|#|\/|\.\.?\/)/i.test(href)) {
+            return escapeAttr(href);
+          }
+          return "";
+        }
+
+        function normalizeMarkupText(value) {
+          return normalizeTextArtifacts(String(value || "")).trim();
+        }
+
+        function wrapTextForCanvas(text, maxWidth, font) {
+          const value = cleanText(text);
+          if (!value) return [];
+
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          ctx.font = font;
+          const words = value.split(/\s+/);
+          const lines = [];
+          let current = "";
+
+          words.forEach((word) => {
+            const next = current ? `${current} ${word}` : word;
+            if (ctx.measureText(next).width <= maxWidth) {
+              current = next;
+            } else {
+              if (current) lines.push(current);
+              current = word;
+            }
+          });
+
+          if (current) lines.push(current);
+          return lines;
+        }
+
+        function drawNoteBlock(ctx, lines, x, y, width, label) {
+          const height = 42 + lines.length * 22;
+          ctx.fillStyle = "#fff7ed";
+          ctx.fillRect(x, y, width, height - 10);
+          ctx.strokeStyle = "#fed7aa";
+          ctx.strokeRect(x, y, width, height - 10);
+          ctx.fillStyle = "#9a3412";
+          ctx.font = "700 15px Segoe UI, sans-serif";
+          ctx.fillText(label, x + 14, y + 22);
+          ctx.fillStyle = "#172033";
+          ctx.font = "16px Segoe UI, sans-serif";
+          lines.forEach((line, index) => {
+            ctx.fillText(line, x + 14, y + 48 + index * 22);
+          });
+          return y + height;
+        }
+
+        function markdownCanvasNoteBlock(text, width, label) {
+          const blocks = parseMarkdownCanvasBlocks(text, width - 28);
+          if (!blocks.length) return { label, width, blocks, height: 0 };
+          const contentHeight = blocks.reduce(
+            (sum, block) => sum + block.height,
+            0,
+          );
+          return {
+            label,
+            width,
+            blocks,
+            height: 42 + contentHeight + 10,
+          };
+        }
+
+        function parseMarkdownCanvasBlocks(text, contentWidth) {
+          const value = normalizeMarkupText(text);
+          if (!value) return [];
+          const lines = value.replace(/\r\n?/g, "\n").split("\n");
+          const blocks = [];
+          let index = 0;
+
+          while (index < lines.length) {
+            const line = lines[index];
+            if (!line.trim()) {
+              index += 1;
+              continue;
+            }
+
+            if (isMarkdownTableStart(lines, index)) {
+              const headers = splitMarkdownTableRow(lines[index]);
+              index += 2;
+              const rows = [];
+              while (
+                index < lines.length &&
+                lines[index].trim() &&
+                splitMarkdownTableRow(lines[index]).length > 1
+              ) {
+                rows.push(splitMarkdownTableRow(lines[index]));
+                index += 1;
+              }
+              blocks.push(markdownCanvasTableBlock(headers, rows, contentWidth));
+              continue;
+            }
+
+            const paragraph = [canvasMarkdownLineText(line)];
+            index += 1;
+            while (
+              index < lines.length &&
+              lines[index].trim() &&
+              !isMarkdownTableStart(lines, index)
+            ) {
+              paragraph.push(canvasMarkdownLineText(lines[index]));
+              index += 1;
+            }
+            const wrapped = wrapTextForCanvas(
+              paragraph.join(" "),
+              contentWidth,
+              "16px Segoe UI, sans-serif",
+            );
+            if (wrapped.length) {
+              blocks.push({ type: "text", lines: wrapped, height: wrapped.length * 22 + 6 });
+            }
+          }
+
+          return blocks;
+        }
+
+        function markdownCanvasTableBlock(headers, rows, contentWidth) {
+          const columnCount = Math.max(headers.length, ...rows.map((row) => row.length));
+          const columnWidth = contentWidth / columnCount;
+          const preparedRows = [headers, ...rows].map((row) =>
+            Array.from({ length: columnCount }, (_, cellIndex) => {
+              const lines = wrapTextForCanvas(
+                canvasMarkdownLineText(row[cellIndex] || ""),
+                columnWidth - 16,
+                "16px Segoe UI, sans-serif",
+              );
+              return lines.length ? lines : [""];
+            }),
+          );
+          const rowHeights = preparedRows.map(
+            (row) => Math.max(...row.map((cellLines) => cellLines.length)) * 20 + 14,
+          );
+          return {
+            type: "table",
+            columnCount,
+            columnWidth,
+            rows: preparedRows,
+            rowHeights,
+            height: rowHeights.reduce((sum, rowHeight) => sum + rowHeight, 0) + 10,
+          };
+        }
+
+        function drawMarkdownCanvasNoteBlock(ctx, block, x, y) {
+          ctx.fillStyle = "#fff7ed";
+          ctx.fillRect(x, y, block.width, block.height - 10);
+          ctx.strokeStyle = "#fed7aa";
+          ctx.strokeRect(x, y, block.width, block.height - 10);
+          ctx.fillStyle = "#9a3412";
+          ctx.font = "700 15px Segoe UI, sans-serif";
+          ctx.fillText(block.label, x + 14, y + 22);
+
+          let cursorY = y + 48;
+          block.blocks.forEach((child) => {
+            if (child.type === "table") {
+              cursorY = drawMarkdownCanvasTable(ctx, child, x + 14, cursorY);
+              return;
+            }
+            ctx.fillStyle = "#172033";
+            ctx.font = "16px Segoe UI, sans-serif";
+            child.lines.forEach((line, lineIndex) => {
+              ctx.fillText(line, x + 14, cursorY + lineIndex * 22);
+            });
+            cursorY += child.height;
+          });
+
+          return y + block.height;
+        }
+
+        function drawMarkdownCanvasTable(ctx, table, x, y) {
+          let cursorY = y;
+          table.rows.forEach((row, rowIndex) => {
+            const rowHeight = table.rowHeights[rowIndex];
+            row.forEach((cellLines, cellIndex) => {
+              const cellX = x + cellIndex * table.columnWidth;
+              ctx.fillStyle = rowIndex === 0 ? "#f8fafc" : "#ffffff";
+              ctx.fillRect(cellX, cursorY, table.columnWidth, rowHeight);
+              ctx.strokeStyle = "#cbd5e1";
+              ctx.strokeRect(cellX, cursorY, table.columnWidth, rowHeight);
+              ctx.fillStyle = "#172033";
+              ctx.font =
+                rowIndex === 0
+                  ? "700 15px Segoe UI, sans-serif"
+                  : "16px Segoe UI, sans-serif";
+              cellLines.forEach((line, lineIndex) => {
+                ctx.fillText(line, cellX + 8, cursorY + 22 + lineIndex * 20);
+              });
+            });
+            cursorY += rowHeight;
+          });
+          return cursorY + 10;
+        }
+
+        function canvasMarkdownLineText(value) {
+          return cleanText(
+            String(value || "")
+              .replace(/`([^`]+)`/g, "$1")
+              .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+              .replace(/^#{1,6}\s+/, "")
+              .replace(/^\s*[-*+]\s+/, "- ")
+              .replace(/^\s*\d+[\).]\s+/, "- "),
+          );
+        }
+
+        function uniqueById(item, index, list) {
+          return list.findIndex((other) => other.id === item.id) === index;
+        }
+
+        function normalizeTcId(value) {
+          const raw = cleanText(value);
+          const numeric = raw.match(/^\d{1,5}$/);
+          if (numeric) return `TC-${numeric[0].padStart(3, "0")}`;
+          const match = raw.match(/\bTC[-_ ]?(\d{1,5})\b/i);
+          return match ? `TC-${match[1].padStart(3, "0")}` : "";
+        }
+
+        function cleanText(value) {
+          const text = normalizeTextArtifacts(String(value || ""))
+            .replace(/^[:#\-\s]+/, "")
+            .replace(/\*\*/g, "")
+            .trim();
+          return text.replace(/^(['"])(.*)\1$/, "$2").trim();
+        }
+
+        function normalizeTextArtifacts(value) {
+          return value
+            .replace(/‚Äú|‚Äù/g, '"')
+            .replace(/‚Äò|‚Äô/g, "'")
+            .replace(/‚Äì/g, "-")
+            .replace(/‚Äî/g, "-")
+            .replace(/‚Ä¶/g, "...")
+            .replace(/Â /g, " ")
+            .replace(/Â/g, "");
+        }
+
+        function fileToDataUrl(file) {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+        }
+
+        async function dataUrlToBlob(dataUrl) {
+          return (await fetch(dataUrl)).blob();
+        }
+
+        function blobToDataUrl(blob) {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        }
+
+        function delay(ms) {
+          return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+
+        function loadImage(src) {
+          return new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = reject;
+            image.src = src;
+          });
+        }
+
+        function downloadJson(fileName, data) {
+          downloadText(
+            fileName,
+            JSON.stringify(data, null, 2),
+            "application/json",
+          );
+        }
+
+        function downloadText(fileName, text, type) {
+          const blob = new Blob([text], { type });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = fileName;
+          link.click();
+          URL.revokeObjectURL(url);
+        }
+
+        function defaultWorkspaceName(fileName) {
+          return (
+            fileName.replace(/\.(md|markdown|csv)$/i, "") ||
+            "Evidence Workspace"
+          );
+        }
+
+        function safeFileName(value) {
+          return String(value || "xray-evidence")
+            .replace(/[^\w.-]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .toLowerCase();
+        }
+
+        function cryptoId() {
+          return crypto.randomUUID
+            ? crypto.randomUUID()
+            : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
+
+        function nowIso() {
+          return new Date().toISOString();
+        }
+
+        function formatDate(value) {
+          return value ? new Date(value).toLocaleString() : "Unknown time";
+        }
+
+        function escapeHtml(value) {
+          return String(value || "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+        }
+
+        function escapeAttr(value) {
+          return escapeHtml(value);
+        }
+
+        function cssEscape(value) {
+          if (window.CSS?.escape) return CSS.escape(value);
+          return String(value || "").replace(/["\\]/g, "\\$&");
+        }
+
+        function toast(message) {
+          const node = document.createElement("div");
+          node.className = "toast";
+          node.textContent = message;
+          document.body.appendChild(node);
+          setTimeout(() => node.remove(), 2800);
+        }
+
+        function showError(error) {
+          toast(error?.message || "Action failed.");
+        }
+      })();
+    </script>
+  </body>
+</html>

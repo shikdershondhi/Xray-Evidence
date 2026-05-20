@@ -1,0 +1,30 @@
+{
+  "name": "xray-evidence",
+  "version": "1.0.0",
+  "description": "Standalone Xray Markdown evidence builder and local workflow server.",
+  "main": "open-evidence.js",
+  "type": "commonjs",
+  "scripts": {
+    "evidence": "node open-evidence.js",
+    "server": "node workflow/server.js",
+    "evidence:workflow": "node workflow/server.js --open",
+    "xray:login": "node workflow/login.js",
+    "setup": "npm install && npx playwright install chromium",
+    "doctor": "node scripts/doctor.js",
+    "test": "node --test tests/*.test.js workflow/*.test.js"
+  },
+  "keywords": [
+    "xray",
+    "jira",
+    "evidence",
+    "playwright"
+  ],
+  "author": "shikder shondhi",
+  "license": "MIT",
+  "dependencies": {
+    "@playwright/test": "^1.59.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0"
+  }
+}

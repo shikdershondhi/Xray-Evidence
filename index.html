@@ -1,0 +1,1025 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xray Evidence</title>
+    <meta
+      name="description"
+      content="Local Jira Xray evidence builder with Markdown, CSV, screenshots, backups, Gist sync, and Playwright workflow automation."
+    />
+    <script>
+      (() => {
+        const storageKey = "xray-evidence-page-theme";
+        const savedTheme = localStorage.getItem(storageKey);
+        const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+        document.documentElement.dataset.theme = savedTheme || systemTheme;
+      })();
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f8fb;
+        --surface: #ffffff;
+        --surface-raised: #f1f5f9;
+        --ink: #101828;
+        --muted: #566176;
+        --faint: #758196;
+        --line: #d8dee8;
+        --line-strong: #b8c2d1;
+        --accent: #0f62fe;
+        --accent-strong: #003fb8;
+        --success: #0f7b4f;
+        --warning: #b7791f;
+        --danger: #bd2f34;
+        --code-bg: #0d1220;
+        --code-ink: #e5edf8;
+        --shadow: 0 24px 80px rgba(30, 41, 59, 0.14);
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #0a0e17;
+        --surface: #111827;
+        --surface-raised: #172033;
+        --ink: #edf3ff;
+        --muted: #aab5c8;
+        --faint: #7f8aa0;
+        --line: #273247;
+        --line-strong: #3d4b64;
+        --accent: #66a2ff;
+        --accent-strong: #9dc2ff;
+        --success: #4fd09a;
+        --warning: #f1b84b;
+        --danger: #ff747a;
+        --code-bg: #050812;
+        --code-ink: #eef5ff;
+        --shadow: 0 24px 90px rgba(0, 0, 0, 0.32);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 12% 8%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 28rem),
+          linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 62%, var(--bg)), var(--bg) 38rem);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .page {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .shell {
+        width: min(1160px, calc(100% - 40px));
+        margin: 0 auto;
+      }
+
+      .nav-wrap {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--bg) 88%, transparent);
+        backdrop-filter: blur(18px);
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 72px;
+        gap: 24px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-decoration: none;
+      }
+
+      .brand-mark {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--accent);
+        box-shadow: inset 0 -8px 18px color-mix(in srgb, var(--accent) 10%, transparent);
+      }
+
+      .nav-actions,
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .nav-links a {
+        padding: 9px 10px;
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 650;
+        text-decoration: none;
+      }
+
+      .nav-links a:hover {
+        background: var(--surface);
+        color: var(--ink);
+      }
+
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--ink);
+        cursor: pointer;
+      }
+
+      .theme-toggle:hover {
+        border-color: var(--line-strong);
+      }
+
+      .theme-icon {
+        position: relative;
+        display: block;
+        width: 18px;
+        height: 18px;
+      }
+
+      .theme-icon::before {
+        content: "";
+        position: absolute;
+        inset: 2px;
+        border-radius: 50%;
+        background: var(--ink);
+        box-shadow: 6px -3px 0 0 var(--surface);
+      }
+
+      :root[data-theme="dark"] .theme-icon::before {
+        inset: 3px;
+        background: var(--ink);
+        box-shadow:
+          0 -8px 0 -5px var(--ink),
+          0 8px 0 -5px var(--ink),
+          8px 0 0 -5px var(--ink),
+          -8px 0 0 -5px var(--ink),
+          6px 6px 0 -5px var(--ink),
+          -6px -6px 0 -5px var(--ink),
+          6px -6px 0 -5px var(--ink),
+          -6px 6px 0 -5px var(--ink);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(360px, 0.86fr);
+        gap: 54px;
+        align-items: center;
+        padding: 72px 0 44px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 18px;
+        color: var(--accent-strong);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--success);
+        box-shadow: 0 0 0 5px color-mix(in srgb, var(--success) 14%, transparent);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 790px;
+        margin-bottom: 22px;
+        font-size: clamp(44px, 6vw, 82px);
+        line-height: 0.96;
+        letter-spacing: 0;
+      }
+
+      .lead {
+        max-width: 690px;
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.68;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 32px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        padding: 0 18px;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 800;
+        text-decoration: none;
+        transition:
+          transform 140ms ease,
+          border-color 140ms ease,
+          background 140ms ease;
+      }
+
+      .button:hover {
+        transform: translateY(-1px);
+      }
+
+      .button.primary {
+        border-color: color-mix(in srgb, var(--accent) 76%, #000);
+        background: var(--accent);
+        color: #ffffff;
+      }
+
+      .button.secondary {
+        background: var(--surface);
+        color: var(--ink);
+      }
+
+      .button.subtle {
+        border-color: transparent;
+        color: var(--muted);
+      }
+
+      .proof {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 34px;
+        max-width: 720px;
+      }
+
+      .proof-item {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--surface) 84%, transparent);
+        padding: 14px;
+      }
+
+      .proof-item strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 18px;
+      }
+
+      .proof-item span {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .preview {
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .preview-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        min-height: 48px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--line);
+        background: var(--surface-raised);
+      }
+
+      .window-dots {
+        display: inline-flex;
+        gap: 7px;
+      }
+
+      .window-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--danger);
+      }
+
+      .window-dot:nth-child(2) {
+        background: var(--warning);
+      }
+
+      .window-dot:nth-child(3) {
+        background: var(--success);
+      }
+
+      .preview-title {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .preview-body {
+        display: grid;
+        gap: 16px;
+        padding: 18px;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-raised);
+      }
+
+      .segmented {
+        display: inline-flex;
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+
+      .segment {
+        padding: 7px 10px;
+        border-radius: 6px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .segment.active {
+        background: var(--accent);
+        color: #ffffff;
+      }
+
+      .tiny-button {
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .case-card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        overflow: hidden;
+      }
+
+      .case-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .case-id {
+        color: var(--accent-strong);
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .case-title {
+        margin-top: 4px;
+        font-weight: 850;
+      }
+
+      .status {
+        padding: 5px 8px;
+        border: 1px solid color-mix(in srgb, var(--success) 36%, transparent);
+        border-radius: 999px;
+        color: var(--success);
+        font-size: 11px;
+        font-weight: 900;
+      }
+
+      .case-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .field {
+        min-height: 118px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-raised);
+      }
+
+      .field-label {
+        margin-bottom: 9px;
+        color: var(--faint);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .field p {
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .shot {
+        height: 74px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background:
+          linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent 48%),
+          repeating-linear-gradient(0deg, var(--surface), var(--surface) 8px, var(--surface-raised) 8px, var(--surface-raised) 16px);
+      }
+
+      .preview-footer {
+        display: flex;
+        gap: 10px;
+        padding: 0 14px 14px;
+      }
+
+      .preview-action {
+        flex: 1;
+        padding: 10px 8px;
+        border-radius: 8px;
+        background: var(--code-bg);
+        color: var(--code-ink);
+        font-size: 12px;
+        font-weight: 850;
+        text-align: center;
+      }
+
+      .section-head {
+        max-width: 760px;
+        padding-top: 68px;
+        margin-bottom: 24px;
+      }
+
+      .section-head h2 {
+        margin-bottom: 10px;
+        font-size: clamp(30px, 4vw, 48px);
+        line-height: 1.05;
+        letter-spacing: 0;
+      }
+
+      .section-head p {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.6;
+      }
+
+      .features {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        padding-bottom: 28px;
+      }
+
+      .feature {
+        min-height: 220px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--surface) 88%, transparent);
+        padding: 22px;
+      }
+
+      .feature-icon {
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        margin-bottom: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-raised);
+        color: var(--accent-strong);
+        font-weight: 900;
+      }
+
+      .feature h3 {
+        margin-bottom: 9px;
+        font-size: 19px;
+        line-height: 1.25;
+      }
+
+      .feature p {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .setup {
+        display: grid;
+        grid-template-columns: minmax(0, 0.85fr) minmax(360px, 1.15fr);
+        gap: 28px;
+        align-items: stretch;
+        margin: 44px 0 78px;
+        padding: 28px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .setup-copy h2 {
+        margin-bottom: 12px;
+        font-size: 34px;
+        line-height: 1.08;
+      }
+
+      .setup-copy p {
+        color: var(--muted);
+        line-height: 1.64;
+      }
+
+      .setup-list {
+        display: grid;
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      .setup-item {
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        gap: 12px;
+        align-items: start;
+      }
+
+      .step-num {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        background: var(--surface-raised);
+        color: var(--accent-strong);
+        font-size: 13px;
+        font-weight: 900;
+      }
+
+      .setup-item strong {
+        display: block;
+        margin-bottom: 2px;
+      }
+
+      .setup-item span {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .terminal {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        overflow: hidden;
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: var(--code-bg);
+        color: var(--code-ink);
+      }
+
+      .terminal-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        min-height: 44px;
+        padding: 0 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        color: #9fb0cb;
+        font-size: 12px;
+        font-weight: 850;
+      }
+
+      pre {
+        margin: 0;
+        padding: 18px;
+        overflow: auto;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 13px;
+        line-height: 1.75;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      footer {
+        margin-top: auto;
+        border-top: 1px solid var(--line);
+        padding: 24px 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .footer-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .footer-row a {
+        color: var(--accent-strong);
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      @media (max-width: 920px) {
+        .hero,
+        .setup {
+          grid-template-columns: 1fr;
+        }
+
+        .hero {
+          padding-top: 48px;
+        }
+
+        .features,
+        .proof {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 680px) {
+        .shell {
+          width: min(100% - 28px, 1160px);
+        }
+
+        .nav {
+          min-height: auto;
+          padding: 14px 0;
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .nav-actions {
+          width: 100%;
+          justify-content: space-between;
+        }
+
+        .nav-links {
+          flex-wrap: wrap;
+        }
+
+        h1 {
+          font-size: clamp(40px, 13vw, 58px);
+        }
+
+        .actions,
+        .preview-footer {
+          flex-direction: column;
+        }
+
+        .button {
+          width: 100%;
+        }
+
+        .case-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .toolbar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .setup {
+          min-width: 0;
+          padding: 18px;
+        }
+
+        .footer-row {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="nav-wrap">
+        <nav class="shell nav" aria-label="Main navigation">
+          <a class="brand" href="#" aria-label="Xray Evidence home">
+            <span class="brand-mark" aria-hidden="true">XR</span>
+            <span>Xray Evidence</span>
+          </a>
+          <div class="nav-actions">
+            <div class="nav-links">
+              <a href="#features">Features</a>
+              <a href="#setup">Setup</a>
+              <a href="https://github.com/shikdershondhi/Xray-Evidence">GitHub</a>
+            </div>
+            <button
+              class="theme-toggle"
+              id="themeToggle"
+              type="button"
+              aria-label="Switch to dark theme"
+              aria-pressed="false"
+              title="Toggle theme"
+            >
+              <span class="theme-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+        </nav>
+      </header>
+
+      <main class="shell">
+        <section class="hero" aria-labelledby="hero-title">
+          <div>
+            <p class="eyebrow">Local Jira Xray evidence builder</p>
+            <h1 id="hero-title">Evidence packages for Xray, built on your machine.</h1>
+            <p class="lead">
+              Load Markdown or CSV test cases, collect screenshots and Actual Result
+              notes, then run a local Playwright workflow that pastes evidence into
+              Jira Xray without a hosted data pipeline.
+            </p>
+            <div class="actions">
+              <a
+                class="button primary"
+                href="https://github.com/shikdershondhi/Xray-Evidence/releases/latest"
+              >
+                Download App
+              </a>
+              <a class="button secondary" href="#setup">View Setup</a>
+              <a class="button subtle" href="https://github.com/shikdershondhi/Xray-Evidence">
+                Open GitHub
+              </a>
+            </div>
+            <div class="proof" aria-label="Workflow proof points">
+              <div class="proof-item">
+                <strong>Local</strong>
+                <span>Evidence, auth state, and browser automation stay on your workstation.</span>
+              </div>
+              <div class="proof-item">
+                <strong>Static</strong>
+                <span>GitHub Pages landing page, standalone app file, no hosted backend.</span>
+              </div>
+              <div class="proof-item">
+                <strong>Fresh</strong>
+                <span>Setup checks guide a clean clone from Node.js to workflow launch.</span>
+              </div>
+            </div>
+          </div>
+
+          <aside class="preview" aria-label="Evidence builder UI preview">
+            <div class="preview-top">
+              <div class="window-dots" aria-hidden="true">
+                <span class="window-dot"></span>
+                <span class="window-dot"></span>
+                <span class="window-dot"></span>
+              </div>
+              <span class="preview-title">Evidence Builder</span>
+            </div>
+            <div class="preview-body">
+              <div class="toolbar">
+                <div class="segmented" aria-hidden="true">
+                  <span class="segment active">All</span>
+                  <span class="segment">Pending</span>
+                  <span class="segment">Uploaded</span>
+                </div>
+                <span class="tiny-button">Run local workflow</span>
+              </div>
+
+              <div class="case-card">
+                <div class="case-head">
+                  <div>
+                    <div class="case-id">TC-001</div>
+                    <div class="case-title">Upload evidence to Xray execution</div>
+                  </div>
+                  <span class="status">PASS</span>
+                </div>
+                <div class="case-grid">
+                  <div class="field">
+                    <div class="field-label">Actual Result</div>
+                    <p>Login succeeds, dashboard opens, and the execution row is updated.</p>
+                    <p>Markdown notes and tables render before copy.</p>
+                  </div>
+                  <div class="field">
+                    <div class="field-label">Screenshot Evidence</div>
+                    <div class="shot" aria-hidden="true"></div>
+                  </div>
+                </div>
+                <div class="preview-footer">
+                  <div class="preview-action">Copy TC Evidence</div>
+                  <div class="preview-action">Copy Separately</div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <section id="features" aria-labelledby="features-title">
+          <div class="section-head">
+            <h2 id="features-title">Built for repeatable evidence work.</h2>
+            <p>
+              The app keeps testcase content, screenshots, local workflow state, and
+              setup checks close together so evidence runs are easy to repeat from a
+              fresh copy.
+            </p>
+          </div>
+
+          <div class="features">
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">MD</div>
+              <h3>Markdown and CSV import</h3>
+              <p>
+                Bring testcase steps and expected results from Markdown or CSV files,
+                then preserve the source structure while you attach evidence.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">CP</div>
+              <h3>Clipboard evidence</h3>
+              <p>
+                Copy a merged testcase evidence image or separate screenshot items
+                with notes when browser clipboard support allows it.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">PW</div>
+              <h3>Local Playwright workflow</h3>
+              <p>
+                Start the local Node service and let Playwright drive the browser flow
+                that pastes evidence into Jira Xray.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">LO</div>
+              <h3>Local-only data</h3>
+              <p>
+                Test evidence, screenshots, backups, Jira session state, and workflow
+                payloads stay in your browser and local project folder.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">GS</div>
+              <h3>Gist sync</h3>
+              <p>
+                Optional Gist-backed workspace sync helps move evidence state between
+                machines without introducing a custom hosted service.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">FS</div>
+              <h3>Fresh-copy setup</h3>
+              <p>
+                Setup and doctor commands check Node.js, dependencies, Playwright
+                Chromium, launch scripts, and workflow readiness.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="setup" class="setup" aria-labelledby="setup-title">
+          <div class="setup-copy">
+            <h2 id="setup-title">Fresh Copy Setup</h2>
+            <p>
+              Start from a clean clone, install the local browser automation pieces,
+              verify the workstation, then open the evidence workflow.
+            </p>
+            <div class="setup-list">
+              <div class="setup-item">
+                <span class="step-num">1</span>
+                <div>
+                  <strong>Check Node.js</strong>
+                  <span>Install Node.js if <code>node -v</code> or <code>npm -v</code> does not work.</span>
+                </div>
+              </div>
+              <div class="setup-item">
+                <span class="step-num">2</span>
+                <div>
+                  <strong>Install app dependencies</strong>
+                  <span>Run setup once to install npm packages and Playwright Chromium.</span>
+                </div>
+              </div>
+              <div class="setup-item">
+                <span class="step-num">3</span>
+                <div>
+                  <strong>Launch the workflow</strong>
+                  <span>Run doctor, then open the local evidence workflow server.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="terminal" aria-label="Setup commands">
+            <div class="terminal-top">
+              <span>xray-evidence</span>
+              <span>local setup</span>
+            </div>
+            <pre><code>git clone https://github.com/shikdershondhi/Xray-Evidence.git
+cd Xray-Evidence
+
+node -v
+npm -v
+
+npm run setup
+npm run doctor
+npm run evidence:workflow</code></pre>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <div class="shell footer-row">
+          <span>Built by SHIKDER SHONDHI</span>
+          <a href="https://github.com/shikdershondhi/Xray-Evidence/releases/latest">
+            Download App
+          </a>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      (() => {
+        const storageKey = "xray-evidence-page-theme";
+        const root = document.documentElement;
+        const toggle = document.getElementById("themeToggle");
+
+        function applyTheme(theme, shouldStore) {
+          root.dataset.theme = theme;
+          toggle.setAttribute("aria-pressed", String(theme === "dark"));
+          toggle.setAttribute(
+            "aria-label",
+            theme === "dark" ? "Switch to light theme" : "Switch to dark theme",
+          );
+
+          if (shouldStore) {
+            localStorage.setItem(storageKey, theme);
+          }
+        }
+
+        applyTheme(root.dataset.theme || "light", false);
+
+        toggle.addEventListener("click", () => {
+          const nextTheme = root.dataset.theme === "dark" ? "light" : "dark";
+          applyTheme(nextTheme, true);
+        });
+      })();
+    </script>
+  </body>
+</html>
