@@ -1087,6 +1087,11 @@
         color: var(--notice-ink);
       }
 
+      .status-save {
+        margin-left: auto;
+        min-width: 112px;
+      }
+
       .dropzone {
         display: flex;
         min-height: 70px;
@@ -1631,6 +1636,9 @@
           <div class="workbench-head">
             <h2 id="workbenchTitle">Evidence Workbench</h2>
             <div class="workflow-workbench-actions">
+              <button id="cancelWorkspaceWorkflowBtn" class="small danger" disabled>
+                Cancel Workflow
+              </button>
               <button id="startWorkspaceWorkflowBtn" class="small success">
                 Start Workflow for All Evidence
               </button>
@@ -1675,6 +1683,7 @@
           browserMode: "headless",
           serviceAvailable: false,
           queueActive: false,
+          queueCancelRequested: false,
           workflowRunsByTcId: new Map(),
           pollingTimersByRunId: new Map(),
         };
@@ -1699,6 +1708,7 @@
           clearBtn: $("clearBtn"),
           importInput: $("importInput"),
           exportMdBtn: $("exportMdBtn"),
+          cancelWorkspaceWorkflowBtn: $("cancelWorkspaceWorkflowBtn"),
           startWorkspaceWorkflowBtn: $("startWorkspaceWorkflowBtn"),
           supportNotice: $("supportNotice"),
           workspaceName: $("workspaceName"),
@@ -1752,6 +1762,9 @@
           els.importInput.addEventListener("change", importWorkspaceJson);
           els.startWorkspaceWorkflowBtn.addEventListener("click", () =>
             startXrayWorkflowForWorkspace().catch(showError),
+          );
+          els.cancelWorkspaceWorkflowBtn.addEventListener("click", () =>
+            cancelWorkspaceWorkflow().catch(showError),
           );
           els.importGistSettingsBtn.addEventListener("click", () =>
             els.gistSettingsImportInput.click(),
@@ -2183,6 +2196,8 @@
             : "Evidence Workbench";
           els.startWorkspaceWorkflowBtn.disabled =
             !workspace || !totalImages || workflowState.queueActive;
+          els.cancelWorkspaceWorkflowBtn.disabled =
+            !workflowState.queueActive && !hasActiveWorkflowRun();
           renderWorkflowSettingsUi();
         }
 
@@ -2303,6 +2318,7 @@
           const browserMode = normalizeBrowserMode(workflowState.browserMode);
           const noEvidence = !images.length;
           const workflowDisabled = noEvidence || workflowState.queueActive;
+          const cancelDisabled = !isActiveWorkflowRun(runState?.run);
           const summaryText = workflowState.summary
             ? escapeHtml(workflowState.summary)
             : "Not saved. Open Settings and save it once for this workspace.";
@@ -2310,7 +2326,10 @@
           return `<section class="tc-workflow-panel" data-workflow-panel="${tc.id}" aria-label="${escapeAttr(tc.id)} Xray workflow">
           <div class="tc-workflow-head">
             <h4 class="tc-workflow-title">Xray Workflow</h4>
-            <button class="small success" data-action="start-workflow" data-tc="${tc.id}" ${workflowDisabled ? "disabled" : ""}>Start Workflow</button>
+            <div class="workflow-workbench-actions">
+              <button class="small danger" data-action="cancel-workflow" data-tc="${tc.id}" ${cancelDisabled ? "disabled" : ""}>Cancel Workflow</button>
+              <button class="small success" data-action="start-workflow" data-tc="${tc.id}" ${workflowDisabled ? "disabled" : ""}>Start Workflow</button>
+            </div>
           </div>
           <div class="tc-workflow-grid">
             <div class="workflow-summary-label">
@@ -2345,6 +2364,7 @@
               <input type="checkbox" data-action="xray-uploaded" data-tc="${tc.id}" ${tc.xrayUploaded ? "checked" : ""}>
               Uploaded in Xray
             </label>
+            <button class="small success status-save" data-action="save-to-gist" data-tc="${tc.id}" type="button">Save</button>
           </div>
         </div>`;
         }
@@ -2478,6 +2498,14 @@
             .forEach((button) => {
               button.addEventListener("click", () =>
                 startXrayWorkflowForTc(button.dataset.tc).catch(showError),
+              );
+            });
+
+          panel
+            .querySelectorAll('button[data-action="cancel-workflow"]')
+            .forEach((button) => {
+              button.addEventListener("click", () =>
+                cancelXrayWorkflowForTc(button.dataset.tc).catch(showError),
               );
             });
 
@@ -2626,6 +2654,8 @@
           if (action === "delete-image") deleteImage(tcId, index).catch(showError);
           if (action === "clear-tc") clearTcImages(tcId).catch(showError);
           if (action === "download-tc") downloadTcJson(tcId);
+          if (action === "save-to-gist")
+            pushToGist({ confirmBeforePush: false }).catch(showError);
         }
 
         async function addImage(tcId, dataUrl) {
@@ -2752,8 +2782,11 @@
           workspace.updatedAt = nowIso();
           workspace.remoteStatus = "modified";
           saveState();
-          renderWorkflowSettingsUi();
-          if (!options.silent) renderCards();
+          if (options.silent) {
+            renderWorkflowSettingsUi();
+            return;
+          }
+          render();
         }
 
         function saveWorkflowSettingsFromUi() {
@@ -2836,10 +2869,15 @@
         async function startXrayWorkflowQueue(testCases) {
           if (workflowState.queueActive) return;
           workflowState.queueActive = true;
+          workflowState.queueCancelRequested = false;
           render();
           const results = [];
           try {
             for (const tc of testCases) {
+              if (workflowState.queueCancelRequested) {
+                results.push({ tc, status: "cancelled" });
+                break;
+              }
               try {
                 await startXrayWorkflow([tc], "single", { awaitCompletion: true, suppressFinalToast: true });
                 const runState = workflowState.workflowRunsByTcId.get(tc.id);
@@ -2852,12 +2890,17 @@
             }
           } finally {
             workflowState.queueActive = false;
+            workflowState.queueCancelRequested = false;
             render();
           }
 
           const succeeded = results.filter((item) => item.status === "success").length;
-          const failed = results.length - succeeded;
+          const cancelled = results.filter((item) => item.status === "cancelled").length;
+          const failed = results.length - succeeded - cancelled;
           toast(
+            cancelled
+              ? `Workflow queue cancelled: ${succeeded}/${testCases.length} uploaded.`
+              :
             failed
               ? `Workflow queue finished: ${succeeded}/${results.length} uploaded, ${failed} failed.`
               : `Workflow queue completed: ${succeeded}/${results.length} uploaded.`,
@@ -2967,7 +3010,7 @@
               const data = await response.json();
               if (!response.ok) throw new Error(data.error || "Workflow status failed.");
               renderWorkflowRun(data, options);
-              if (["success", "failed", "partial"].includes(data.status)) {
+              if (isFinalWorkflowStatus(data.status)) {
                 clearInterval(workflowState.pollingTimersByRunId.get(runId));
                 workflowState.pollingTimersByRunId.delete(runId);
               }
@@ -2992,7 +3035,7 @@
               const data = await response.json();
               if (!response.ok) throw new Error(data.error || "Workflow status failed.");
               renderWorkflowRun(data, options);
-              if (["success", "failed", "partial"].includes(data.status)) {
+              if (isFinalWorkflowStatus(data.status)) {
                 return data;
               }
             } catch (error) {
@@ -3035,19 +3078,67 @@
             if (run.status === "success") toast("Xray workflow completed.");
             if (run.status === "partial") toast("Xray workflow finished with failures.");
             if (run.status === "failed") toast(run.message || "Xray workflow failed.");
+            if (run.status === "cancelled") toast(run.message || "Xray workflow cancelled.");
           }
+        }
+
+        function isFinalWorkflowStatus(status) {
+          return ["success", "failed", "partial", "cancelled"].includes(status);
+        }
+
+        function isActiveWorkflowRun(run) {
+          return Boolean(run?.runId && !isFinalWorkflowStatus(run.status));
+        }
+
+        function hasActiveWorkflowRun() {
+          for (const runState of workflowState.workflowRunsByTcId.values()) {
+            if (isActiveWorkflowRun(runState?.run)) return true;
+          }
+          return false;
+        }
+
+        async function cancelWorkspaceWorkflow() {
+          workflowState.queueCancelRequested = true;
+          const cancelPromises = [];
+          workflowState.workflowRunsByTcId.forEach((runState, tcId) => {
+            if (isActiveWorkflowRun(runState?.run)) {
+              cancelPromises.push(cancelXrayWorkflowForTc(tcId));
+            }
+          });
+          if (!cancelPromises.length) {
+            renderStatus();
+            toast("Workflow queue cancellation requested.");
+            return;
+          }
+          await Promise.all(cancelPromises);
+        }
+
+        async function cancelXrayWorkflowForTc(tcId) {
+          const runState = workflowState.workflowRunsByTcId.get(tcId);
+          const runId = runState?.run?.runId;
+          if (!runId || !isActiveWorkflowRun(runState.run)) return;
+          const response = await fetch(
+            `${WORKFLOW_SERVICE_URL}/workflow/${encodeURIComponent(runId)}/cancel`,
+            { method: "POST" },
+          );
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || `Workflow cancel failed (${response.status}).`);
+          }
+          renderWorkflowRun(data);
         }
 
         function markTcUploadedFromWorkflowResult(tcId, runState) {
           const tc = getTc(tcId);
           if (!tc || tc.xrayUploaded) return false;
-          const expected = cleanText(runState.testcaseName);
+          const runStatus = runState.run?.status;
+          if (!["success", "partial"].includes(runStatus)) return false;
+          const expected = cleanText(tc.title);
           const results = Array.isArray(runState.run?.results)
             ? runState.run.results
             : [];
           const succeeded = results.some(
             (result) =>
-              runState.run?.status === "success" &&
               result?.status === "success" &&
               cleanText(result?.testcaseName) === expected,
           );
@@ -3160,7 +3251,7 @@
           if (!tc.images?.length || !workflowState.summary) return "";
           const status = runState?.run?.status || "";
           if (status === "success") return " success";
-          if (status === "failed" || status === "partial") return " error";
+          if (status === "failed" || status === "partial" || status === "cancelled") return " error";
           if (status === "queued" || status === "running") return " running";
           return workflowState.serviceAvailable ? " success" : " error";
         }
@@ -3170,7 +3261,7 @@
           if (!run) return "";
 
           const status = run.status || "queued";
-          const final = ["success", "partial", "failed"].includes(status);
+          const final = isFinalWorkflowStatus(status);
           const results = Array.isArray(run.results) ? run.results : [];
           const logs = Array.isArray(run.logs) ? run.logs : [];
           const latestLog = logs[logs.length - 1];
@@ -3186,6 +3277,7 @@
             final ? "final" : "",
             status === "failed" ? "failed" : "",
             status === "partial" ? "partial" : "",
+            status === "cancelled" ? "failed" : "",
             expanded ? "expanded" : "",
           ]
             .filter(Boolean)
@@ -4118,7 +4210,8 @@
           return rawResp.text();
         }
 
-        async function pushToGist() {
+        async function pushToGist(options = {}) {
+          const confirmBeforePush = options.confirmBeforePush !== false;
           const gistId = (els.gistId?.value || "").trim();
           const username = els.githubUsername?.value?.trim();
 
@@ -4138,9 +4231,11 @@
             .join("\n");
           const msg = `This will push all ${state.workspaces.length} workspace(s) to your Gist:\n\n${preview}\n\nProceed?`;
 
-          if (!confirm(msg)) {
-            toast("Push cancelled");
-            return;
+          if (confirmBeforePush) {
+            if (!confirm(msg)) {
+              toast("Push cancelled");
+              return;
+            }
           }
 
           try {

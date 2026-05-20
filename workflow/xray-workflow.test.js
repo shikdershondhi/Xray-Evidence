@@ -16,6 +16,7 @@ const {
 const {
   buildSetupLaunchCommand,
   checkExistingWorkflowService,
+  createServer,
   startWorkflowServer,
   isWorkflowServiceHealth,
   validateWorkflowPayload,
@@ -145,6 +146,50 @@ function getLocalPath(port, path) {
   });
 }
 
+function postLocalJson(port, path, payload = {}) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const req = http.request(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path,
+        method: "POST",
+        timeout: 2000,
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        let responseBody = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          responseBody += chunk;
+        });
+        res.on("end", () =>
+          resolve({
+            statusCode: res.statusCode,
+            body: responseBody,
+            json: responseBody ? JSON.parse(responseBody) : {},
+          }),
+        );
+      },
+    );
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error(`POST ${path} timed out`));
+    });
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
+async function listenOnRandomPort(server) {
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return server.address().port;
+}
+
 test("serves the evidence UI from the local workflow server root", async () => {
   const server = await startWorkflowServer({ port: 0, host: "127.0.0.1" });
 
@@ -172,6 +217,66 @@ test("reports the actual local port when started dynamically", async () => {
     assert.equal(response.statusCode, 200);
     assert.equal(payload.status, "ready");
     assert.equal(payload.port, port);
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
+test("cancels a running workflow run through the local server", async () => {
+  let abortSeen = false;
+  const server = createServer({
+    port: 0,
+    host: "127.0.0.1",
+    workflowRunner: (_payload, _notify, options) =>
+      new Promise((resolve, reject) => {
+        options.signal.addEventListener("abort", () => {
+          abortSeen = true;
+          reject(Object.assign(new Error("Workflow cancelled."), { code: "XRAY_WORKFLOW_CANCELLED" }));
+        });
+      }),
+  });
+  const port = await listenOnRandomPort(server);
+
+  try {
+    const start = await postLocalJson(port, "/workflow/start", {
+      testExecutionSummary: "NS-1 Test Execution",
+      browserMode: "headless",
+      items: [
+        {
+          testcaseName: "Upload evidence",
+          evidencePngDataUrl: "data:image/png;base64,AAAA",
+          status: "pass",
+        },
+      ],
+    });
+    assert.equal(start.statusCode, 202);
+
+    const cancel = await postLocalJson(
+      port,
+      `/workflow/${encodeURIComponent(start.json.runId)}/cancel`,
+    );
+
+    assert.equal(cancel.statusCode, 200);
+    assert.equal(cancel.json.status, "cancelled");
+    assert.equal(abortSeen, true);
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
+test("cancel workflow returns 404 for an unknown run", async () => {
+  const server = createServer({ port: 0, host: "127.0.0.1" });
+  const port = await listenOnRandomPort(server);
+
+  try {
+    const response = await postLocalJson(port, "/workflow/missing-run/cancel");
+
+    assert.equal(response.statusCode, 404);
+    assert.match(response.json.error, /not found/i);
   } finally {
     await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));

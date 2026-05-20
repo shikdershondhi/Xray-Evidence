@@ -84,6 +84,18 @@ function buildChromiumLaunchOptions(browserMode) {
   };
 }
 
+function workflowCancelledError() {
+  return Object.assign(new Error("Workflow cancelled."), {
+    code: "XRAY_WORKFLOW_CANCELLED",
+  });
+}
+
+function throwIfWorkflowCancelled(signal) {
+  if (signal?.aborted) {
+    throw workflowCancelledError();
+  }
+}
+
 function notifyLog(notify, level, testcaseName, message, status = "running") {
   notify(status, message, { level, testcaseName, message });
 }
@@ -106,7 +118,8 @@ function shouldSkipExecutedRow(rowStatus) {
   return rowStatus === "passed" || rowStatus === "failed";
 }
 
-async function runXrayWorkflow(payload, notify = () => {}) {
+async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
+  throwIfWorkflowCancelled(options.signal);
   const browserMode = normalizeBrowserMode(payload.browserMode);
   logDebug("workflow started", {
     summary: payload.testExecutionSummary,
@@ -119,6 +132,12 @@ async function runXrayWorkflow(payload, notify = () => {}) {
   });
   notifyLog(notify, "info", "", `Launching Playwright in ${browserMode} mode.`);
   const browser = await chromium.launch(buildChromiumLaunchOptions(browserMode));
+  options.onBrowser?.(browser);
+  const abortBrowser = () => {
+    browser.close().catch(() => {});
+  };
+  options.signal?.addEventListener("abort", abortBrowser, { once: true });
+  throwIfWorkflowCancelled(options.signal);
 
   const contextOptions = hasSavedJiraSession()
     ? { storageState: authStatePath() }
@@ -132,6 +151,7 @@ async function runXrayWorkflow(payload, notify = () => {}) {
   const results = [];
 
   try {
+    throwIfWorkflowCancelled(options.signal);
     notifyLog(notify, "info", "", "Opening Jira Xray test executions.");
     await page.goto(XRAY_TEST_EXECUTIONS_URL, {
       waitUntil: "domcontentloaded",
@@ -149,10 +169,12 @@ async function runXrayWorkflow(payload, notify = () => {}) {
     }
 
     await waitForXrayAppReady(page, notify);
+    throwIfWorkflowCancelled(options.signal);
     notifyLog(notify, "info", "", `Searching execution "${payload.testExecutionSummary}".`);
     await openTestExecution(page, payload.testExecutionSummary);
 
     for (const item of payload.items) {
+      throwIfWorkflowCancelled(options.signal);
       let currentStep = "Starting testcase";
       try {
         const localStatus = normalizeWorkflowStatus(item.status);
@@ -199,6 +221,7 @@ async function runXrayWorkflow(payload, notify = () => {}) {
           message: "Evidence uploaded.",
         });
       } catch (error) {
+        throwIfWorkflowCancelled(options.signal);
         const message = `${currentStep} failed: ${error.message}`;
         notifyLog(notify, "error", item.testcaseName, message);
         results.push({
@@ -222,7 +245,8 @@ async function runXrayWorkflow(payload, notify = () => {}) {
       results,
     };
   } finally {
-    await browser.close();
+    options.signal?.removeEventListener("abort", abortBrowser);
+    await browser.close().catch(() => {});
   }
 }
 
@@ -1259,5 +1283,6 @@ module.exports = {
   shouldSkipExecutedRow,
   tokensContainExactSequence,
   tokensEqual,
+  throwIfWorkflowCancelled,
   wordTokensForMatch,
 };
