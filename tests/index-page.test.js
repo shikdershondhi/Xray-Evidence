@@ -55,6 +55,10 @@ test("GitHub Pages workflow deploys the static landing page artifact", () => {
   assert.match(workflow, /pages: write/);
   assert.match(workflow, /id-token: write/);
   assert.match(workflow, /uses: actions\/configure-pages@v5/);
+  assert.doesNotMatch(workflow, /node --test/);
+  assert.doesNotMatch(workflow, /npx playwright install/);
+  assert.doesNotMatch(workflow, /npm test/);
+  assert.doesNotMatch(workflow, /npm ci/);
   assert.match(workflow, /uses: actions\/upload-pages-artifact@v3/);
   assert.match(workflow, /uses: actions\/deploy-pages@v4/);
   assert.match(workflow, /path: _site/);
