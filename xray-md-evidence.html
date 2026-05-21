@@ -1478,6 +1478,10 @@
                 Use copy seperatly to try separate screenshot clipboard items,
                 then paste once into Jira Xray.
               </li>
+              <li>
+                After evidence is uploaded, check Uploaded in Xray on those
+                TCs so Settings can clear their saved evidence files later.
+              </li>
             </ol>
           </section>
           <section class="help-section">
@@ -1573,6 +1577,19 @@
               Browser storage can be cleared by browser cleanup or profile
               changes. Use Export Evidence at the end of important sessions and
               Import Evidence when you need to restore that JSON backup.
+            </p>
+          </section>
+          <section class="help-section">
+            <h3>Storage Cleanup</h3>
+            <p>
+              In Settings, use clear evidence files to remove saved screenshot
+              evidence from browser storage only for TCs checked as Uploaded in
+              Xray in the active workspace.
+            </p>
+            <p>
+              The cleanup keeps TC details, status, Actual Result, bug report
+              fields, and the Uploaded in Xray checkbox. Export Evidence first
+              if you need a backup of the screenshots before clearing them.
             </p>
           </section>
           <section class="help-section">
@@ -1672,7 +1689,12 @@
             <div class="settings-actions">
               <button id="newProjectBtn" class="ghost">New Workspace</button>
               <button id="clearBtn" class="danger">Clear Workspace</button>
+              <button id="clearUploadedEvidenceFilesBtn" class="danger small">clear evidence files</button>
             </div>
+            <p class="settings-help">
+              Clears saved evidence images only for TCs checked as Uploaded in
+              Xray in the active workspace.
+            </p>
           </section>
 
           <section class="settings-section">
@@ -1895,6 +1917,7 @@
           settingsDrawerBackdrop: $("settingsDrawerBackdrop"),
           settingsDrawerCloseBtn: $("settingsDrawerCloseBtn"),
           clearBtn: $("clearBtn"),
+          clearUploadedEvidenceFilesBtn: $("clearUploadedEvidenceFilesBtn"),
           importInput: $("importInput"),
           exportMdBtn: $("exportMdBtn"),
           cancelWorkspaceWorkflowBtn: $("cancelWorkspaceWorkflowBtn"),
@@ -1967,6 +1990,9 @@
           );
           els.clearBtn.addEventListener("click", () =>
             clearActiveWorkspace().catch(showError),
+          );
+          els.clearUploadedEvidenceFilesBtn.addEventListener("click", () =>
+            clearUploadedXrayEvidenceFiles().catch(showError),
           );
           els.exportMdBtn.addEventListener("click", exportSummaryMarkdown);
           els.themeToggleBtn.addEventListener("click", toggleTheme);
@@ -4003,6 +4029,51 @@
           }
           saveState();
           render();
+        }
+
+        async function clearUploadedXrayEvidenceFiles() {
+          const workspace = activeWorkspace();
+          if (!workspace) {
+            toast("No workspace to clear.");
+            return;
+          }
+
+          const uploadedTcsWithImages = (workspace.testCases || []).filter(
+            (tc) => tc.xrayUploaded && (tc.images || []).length,
+          );
+          const imageCount = uploadedTcsWithImages.reduce(
+            (sum, tc) => sum + (tc.images || []).length,
+            0,
+          );
+
+          if (!imageCount) {
+            toast("No uploaded Xray evidence files to clear.");
+            return;
+          }
+
+          if (
+            !confirm(
+              "Clear evidence files for uploaded Xray TCs in this workspace?",
+            )
+          ) {
+            return;
+          }
+
+          await Promise.all(
+            uploadedTcsWithImages.flatMap((tc) =>
+              (tc.images || []).map(deleteImageData),
+            ),
+          );
+          uploadedTcsWithImages.forEach((tc) => {
+            tc.images = [];
+          });
+          workspace.updatedAt = nowIso();
+          workspace.remoteStatus = "modified";
+          saveState();
+          render();
+          toast(
+            `Cleared ${imageCount} evidence image${imageCount === 1 ? "" : "s"} from ${uploadedTcsWithImages.length} uploaded Xray TC${uploadedTcsWithImages.length === 1 ? "" : "s"}.`,
+          );
         }
 
         async function clearActiveWorkspace() {

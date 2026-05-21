@@ -1,9 +1,14 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { chromium } = require("@playwright/test");
 
+const evidenceHtml = readFileSync(
+  path.resolve(__dirname, "..", "xray-md-evidence.html"),
+  "utf8",
+);
 const htmlUrl = pathToFileURL(
   path.resolve(__dirname, "..", "xray-md-evidence.html"),
 ).href;
@@ -67,6 +72,41 @@ async function seedWorkspace(page, workspace) {
     }
   }, workspace);
 }
+
+async function readStoredState(page) {
+  return page.evaluate(() =>
+    JSON.parse(localStorage.getItem("neustring-xray-md-evidence-builder-v1")),
+  );
+}
+
+async function readStoredImageKeys(page) {
+  return page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const request = indexedDB.open(
+          "neustring-xray-md-evidence-builder-v1-images",
+          1,
+        );
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction("screenshots", "readonly");
+          const store = tx.objectStore("screenshots");
+          const keysRequest = store.getAllKeys();
+          keysRequest.onerror = () => reject(keysRequest.error);
+          keysRequest.onsuccess = () => resolve(keysRequest.result.sort());
+        };
+      }),
+  );
+}
+
+test("embedded user manual documents uploaded evidence cleanup", () => {
+  assert.match(evidenceHtml, /clear evidence files/i);
+  assert.match(evidenceHtml, /Uploaded in Xray/);
+  assert.match(evidenceHtml, /active workspace/i);
+  assert.match(evidenceHtml, /browser storage/i);
+  assert.match(evidenceHtml, /TC details, status, Actual Result/i);
+});
 
 test("copy seperatly writes all screenshots as separate clipboard items at once", async () => {
   const browser = await chromium.launch();
@@ -1219,6 +1259,221 @@ test("copy seperatly shows fallback guidance when multi-image clipboard write fa
         .locator(".toast")
         .filter({ hasText: "Use Copy TC Evidence" })
         .waitFor(),
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("settings clear evidence files removes only uploaded Xray evidence from active workspace", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(page, {
+      activeWorkspaceId: "ws-1",
+      workspaces: [
+        {
+          id: "ws-1",
+          name: "Active Evidence Workspace",
+          sourceName: "active.md",
+          sourceType: "markdown",
+          createdAt: "2026-05-19T00:00:00.000Z",
+          updatedAt: "2026-05-19T00:00:00.000Z",
+          testCases: [
+            testCaseFixture({
+              id: "TC-001",
+              title: "Already uploaded evidence",
+              xrayUploaded: true,
+            }),
+            testCaseFixture({
+              id: "TC-002",
+              title: "Not uploaded evidence",
+              xrayUploaded: false,
+            }),
+            testCaseFixture({
+              id: "TC-003",
+              title: "Uploaded with no evidence",
+              xrayUploaded: true,
+              images: [],
+            }),
+          ],
+        },
+        {
+          id: "ws-2",
+          name: "Inactive Evidence Workspace",
+          sourceName: "inactive.md",
+          sourceType: "markdown",
+          createdAt: "2026-05-19T00:00:00.000Z",
+          updatedAt: "2026-05-19T00:00:00.000Z",
+          testCases: [
+            testCaseFixture({
+              id: "TC-004",
+              title: "Inactive uploaded evidence",
+              xrayUploaded: true,
+            }),
+          ],
+        },
+      ],
+    });
+    await page.addInitScript(() => {
+      window.__confirmCalls = 0;
+      window.confirm = () => {
+        window.__confirmCalls += 1;
+        return true;
+      };
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+
+    await assert.equal(
+      await page.locator("#clearUploadedEvidenceFilesBtn").textContent(),
+      "clear evidence files",
+    );
+    await assert.doesNotReject(
+      page
+        .getByText(
+          "Clears saved evidence images only for TCs checked as Uploaded in Xray in the active workspace.",
+        )
+        .waitFor(),
+    );
+
+    await assert.deepEqual(await readStoredImageKeys(page), [
+      "ws-1/TC-001/img-1",
+      "ws-1/TC-002/img-1",
+      "ws-2/TC-004/img-1",
+    ]);
+
+    await page.locator("#clearUploadedEvidenceFilesBtn").click();
+    await page
+      .locator(".toast", {
+        hasText: "Cleared 1 evidence image from 1 uploaded Xray TC.",
+      })
+      .waitFor();
+
+    assert.equal(await page.evaluate(() => window.__confirmCalls), 1);
+    await assert.equal(
+      await page.locator('article[data-tc="TC-001"] .image-card').count(),
+      0,
+    );
+    await assert.equal(
+      await page.locator('article[data-tc="TC-002"] .image-card').count(),
+      1,
+    );
+    await assert.deepEqual(await readStoredImageKeys(page), [
+      "ws-1/TC-002/img-1",
+      "ws-2/TC-004/img-1",
+    ]);
+
+    const storedState = await readStoredState(page);
+    const activeWorkspace = storedState.workspaces.find((ws) => ws.id === "ws-1");
+    const inactiveWorkspace = storedState.workspaces.find((ws) => ws.id === "ws-2");
+    assert.equal(activeWorkspace.remoteStatus, "modified");
+    assert.deepEqual(
+      activeWorkspace.testCases.map((tc) => [tc.id, tc.xrayUploaded, tc.images.length]),
+      [
+        ["TC-001", true, 0],
+        ["TC-002", false, 1],
+        ["TC-003", true, 0],
+      ],
+    );
+    assert.deepEqual(
+      inactiveWorkspace.testCases.map((tc) => [tc.id, tc.xrayUploaded, tc.images.length]),
+      [["TC-004", true, 1]],
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("settings clear evidence files cancel keeps uploaded evidence files", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Already uploaded evidence",
+          xrayUploaded: true,
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.__confirmCalls = 0;
+      window.confirm = () => {
+        window.__confirmCalls += 1;
+        return false;
+      };
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.locator("#clearUploadedEvidenceFilesBtn").click();
+
+    assert.equal(await page.evaluate(() => window.__confirmCalls), 1);
+    await assert.deepEqual(await readStoredImageKeys(page), ["ws-1/TC-001/img-1"]);
+    const storedState = await readStoredState(page);
+    assert.equal(storedState.workspaces[0].testCases[0].images.length, 1);
+    await assert.equal(
+      await page.locator('article[data-tc="TC-001"] .image-card').count(),
+      1,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("settings clear evidence files shows no-op toast when no uploaded evidence files match", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Not uploaded evidence",
+          xrayUploaded: false,
+        }),
+        testCaseFixture({
+          id: "TC-002",
+          title: "Uploaded with no evidence",
+          xrayUploaded: true,
+          images: [],
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.__confirmCalls = 0;
+      window.confirm = () => {
+        window.__confirmCalls += 1;
+        return true;
+      };
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.locator("#clearUploadedEvidenceFilesBtn").click();
+    await page
+      .locator(".toast", {
+        hasText: "No uploaded Xray evidence files to clear.",
+      })
+      .waitFor();
+
+    assert.equal(await page.evaluate(() => window.__confirmCalls), 0);
+    await assert.deepEqual(await readStoredImageKeys(page), ["ws-1/TC-001/img-1"]);
+    const storedState = await readStoredState(page);
+    assert.deepEqual(
+      storedState.workspaces[0].testCases.map((tc) => [tc.id, tc.images.length]),
+      [
+        ["TC-001", 1],
+        ["TC-002", 0],
+      ],
     );
   } finally {
     await browser.close();

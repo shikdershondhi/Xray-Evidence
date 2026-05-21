@@ -69,7 +69,9 @@ That button only works when the page is opened from the local server, not when t
 10. If the TC failed, use `Report Bug` to save bug report fields or copy bug report text/pictures.
 11. Use `Copy` for one screenshot, `Copy TC Evidence` for one combined image, or `copy seperatly` to copy all screenshots as separate clipboard image items.
 12. Paste the copied evidence into Jira Xray.
-13. Use the `?` hint icon beside the dark mode button any time you need the embedded user manual.
+13. After evidence is uploaded, check `Uploaded in Xray` on those TCs.
+14. Open Settings and use `clear evidence files` when you want to remove uploaded TC screenshot files from browser storage.
+15. Use the `?` hint icon beside the dark mode button any time you need the embedded user manual.
 
 `Copy TC Evidence` keeps the existing behavior: it creates one Xray-compatible evidence image. Actual Result is placed first when filled in, then each screenshot note is placed before its screenshot in the visible order.
 
@@ -153,12 +155,14 @@ The `?` hint icon beside the dark mode button opens a popup containing the lates
 - Copies bug report screenshots as one combined image when screenshots are available.
 - Tracks `Actual Result` per TC.
 - Tracks TC status as `Pass`, `Fail`, or unset.
+- Clears saved screenshot evidence files for TCs checked as `Uploaded in Xray` in the active workspace.
 - Exports/imports evidence JSON backups.
 - Exports a Markdown summary.
 - Includes an embedded `?` user manual popup for single-file sharing.
 
 ## Notes
 
-- Screenshots can make browser storage large. If storage becomes full, export your evidence JSON and remove old workspaces.
+- Screenshots can make browser storage large. If storage becomes full, export your evidence JSON, clear evidence files for uploaded Xray TCs, or remove old workspaces.
+- `clear evidence files` removes screenshot files from browser storage only for uploaded Xray TCs in the active workspace. TC details, status, Actual Result, bug report fields, and the uploaded checkbox stay saved.
 - Clipboard permissions depend on browser behavior. Chrome or Edge is recommended.
 - Evidence data stays local unless you manually share the exported JSON.

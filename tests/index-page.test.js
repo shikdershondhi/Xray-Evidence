@@ -37,6 +37,8 @@ test("landing page advertises the expected developer-tool feature surface", () =
     "Local-only data",
     "Gist sync",
     "Fresh-copy setup",
+    "Uploaded evidence cleanup",
+    "clear saved screenshot files",
     "npm run setup",
     "npm run doctor",
     "npm run evidence:workflow",
