@@ -1,4 +1,8 @@
-```markdown
+---
+name: xray-evidence
+description: Project-specific development guidance for the Xray-Evidence repository. Use when working in this repo to follow its JavaScript file conventions, testing patterns, Gist sync behavior, workflow automation structure, and local validation commands.
+---
+
 # Xray-Evidence Development Patterns
 
 > Auto-generated skill from repository analysis
@@ -95,4 +99,3 @@ test('processEvidence returns expected result', () => {
 | /add-feature | Start the workflow for adding a new feature  |
 | /fix-bug     | Start the workflow for fixing a bug          |
 | /run-tests   | Run all test files in the codebase           |
-```
