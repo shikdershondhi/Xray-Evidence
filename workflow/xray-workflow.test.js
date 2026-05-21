@@ -10,6 +10,7 @@ const {
   isPointerInterceptionError,
   normalizeBrowserMode,
   normalizeWorkflowStatus,
+  openTestcaseExecution,
   requireExecutionStatus,
   shouldSkipExecutedRow,
 } = require("./xray-workflow");
@@ -361,6 +362,50 @@ test("detects Playwright pointer interception errors", () => {
     true,
   );
   assert.equal(isPointerInterceptionError(new Error("button is disabled")), false);
+});
+
+test("testcase search retries with slash-safe title terms", async () => {
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const previousDryRun = process.env.XRAY_DRY_RUN_AFTER_TESTCASE_ROW;
+  process.env.XRAY_DRY_RUN_AFTER_TESTCASE_ROW = "1";
+
+  try {
+    await page.setContent(`
+      <input placeholder="Search" />
+      <div id="rows"></div>
+      <script>
+        const rows = document.getElementById("rows");
+        const input = document.querySelector("input");
+        const fullTitle = "Month grouping supports expand/collapse";
+        function render() {
+          rows.innerHTML = "";
+          const query = input.value;
+          if (query === "Month grouping supports expand collapse") {
+            const row = document.createElement("div");
+            row.setAttribute("role", "row");
+            row.textContent = "16 NS-21539 " + fullTitle + " MANUAL NEW TO DO";
+            rows.appendChild(row);
+          }
+        }
+        input.addEventListener("input", render);
+        input.addEventListener("keydown", render);
+      </script>
+    `);
+
+    await assert.rejects(
+      () => openTestcaseExecution(page, "Month grouping supports expand/collapse"),
+      /Dry run stopped after matching and selecting testcase row/,
+    );
+  } finally {
+    if (previousDryRun === undefined) {
+      delete process.env.XRAY_DRY_RUN_AFTER_TESTCASE_ROW;
+    } else {
+      process.env.XRAY_DRY_RUN_AFTER_TESTCASE_ROW = previousDryRun;
+    }
+    await browser.close();
+  }
 });
 
 test("finds Actual Result Edit when the label container has no controls", async () => {

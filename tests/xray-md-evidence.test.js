@@ -1,9 +1,14 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { chromium } = require("@playwright/test");
 
+const evidenceHtml = readFileSync(
+  path.resolve(__dirname, "..", "xray-md-evidence.html"),
+  "utf8",
+);
 const htmlUrl = pathToFileURL(
   path.resolve(__dirname, "..", "xray-md-evidence.html"),
 ).href;
@@ -67,6 +72,41 @@ async function seedWorkspace(page, workspace) {
     }
   }, workspace);
 }
+
+async function readStoredState(page) {
+  return page.evaluate(() =>
+    JSON.parse(localStorage.getItem("neustring-xray-md-evidence-builder-v1")),
+  );
+}
+
+async function readStoredImageKeys(page) {
+  return page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const request = indexedDB.open(
+          "neustring-xray-md-evidence-builder-v1-images",
+          1,
+        );
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction("screenshots", "readonly");
+          const store = tx.objectStore("screenshots");
+          const keysRequest = store.getAllKeys();
+          keysRequest.onerror = () => reject(keysRequest.error);
+          keysRequest.onsuccess = () => resolve(keysRequest.result.sort());
+        };
+      }),
+  );
+}
+
+test("embedded user manual documents uploaded evidence cleanup", () => {
+  assert.match(evidenceHtml, /clear evidence files/i);
+  assert.match(evidenceHtml, /Uploaded in Xray/);
+  assert.match(evidenceHtml, /active workspace/i);
+  assert.match(evidenceHtml, /browser storage/i);
+  assert.match(evidenceHtml, /TC details, status, Actual Result/i);
+});
 
 test("copy seperatly writes all screenshots as separate clipboard items at once", async () => {
   const browser = await chromium.launch();
@@ -751,6 +791,179 @@ test("workbench Cancel Workflow stops the queue before starting the next testcas
   }
 });
 
+test("workbench workflow panel shows all-evidence queue progress and logs", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let cancelCount = 0;
+  let cancelled = false;
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "First evidence" }),
+        testCaseFixture({ id: "TC-002", title: "Second evidence" }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        await route.fulfill({
+          json: { runId: "run-workbench", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      if (url.pathname === "/workflow/run-workbench/cancel") {
+        cancelCount += 1;
+        cancelled = true;
+        await route.fulfill({
+          json: {
+            runId: "run-workbench",
+            status: "cancelled",
+            message: "Workflow cancelled.",
+            payloadSummary: { itemCount: 1, browserMode: "headless" },
+            logs: [
+              {
+                time: "2026-05-19T00:03:00.000Z",
+                level: "warn",
+                testcaseName: "First evidence",
+                message: "Workflow cancelled.",
+              },
+            ],
+            results: [],
+          },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-workbench",
+          status: cancelled ? "cancelled" : "running",
+          message: cancelled ? "Workflow cancelled." : "Uploading evidence in Playwright.",
+          payloadSummary: { itemCount: 1, browserMode: "headless" },
+          logs: [
+            {
+              time: "2026-05-19T00:02:00.000Z",
+              level: "info",
+              testcaseName: "First evidence",
+              message: "Opened Playwright page.",
+            },
+          ],
+          results: [],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+
+    const panel = page.locator("#workspaceWorkflowPanel");
+    await panel.waitFor();
+    await assert.doesNotReject(
+      panel.getByText("Uploading 1 of 2: First evidence").waitFor(),
+    );
+    await assert.doesNotReject(
+      panel
+        .locator(".workspace-workflow-latest", {
+          hasText: "Opened Playwright page.",
+        })
+        .waitFor(),
+    );
+    await assert.doesNotReject(panel.getByText("info").waitFor());
+    await assert.doesNotReject(
+      panel
+        .locator(".workspace-workflow-log", { hasText: "First evidence" })
+        .waitFor(),
+    );
+
+    await page.locator("#cancelWorkspaceWorkflowBtn").click();
+    await page.locator(".toast", { hasText: "Workflow queue cancelled" }).waitFor();
+    await panel.getByText("cancelled").waitFor();
+
+    assert.equal(cancelCount, 1);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("workbench workflow skips testcases already uploaded in Xray", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let startCount = 0;
+  let requestItems = [];
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Already uploaded evidence",
+          xrayUploaded: true,
+        }),
+        testCaseFixture({
+          id: "TC-002",
+          title: "Pending evidence",
+          xrayUploaded: false,
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        startCount += 1;
+        const body = JSON.parse(route.request().postData() || "{}");
+        requestItems = body.items || [];
+        await route.fulfill({
+          json: { runId: "run-skip-uploaded", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-skip-uploaded",
+          status: "success",
+          message: "Workflow finished.",
+          payloadSummary: { itemCount: 1, browserMode: "headless" },
+          logs: [],
+          results: [
+            {
+              testcaseName: "Pending evidence",
+              status: "success",
+            },
+          ],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+    await page.locator(".toast", { hasText: "Workflow queue completed" }).waitFor();
+
+    assert.equal(startCount, 1);
+    assert.deepEqual(
+      requestItems.map((item) => item.testcaseName),
+      ["Pending evidence"],
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
 test("actual result and screenshot notes render markdown previews safely", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
@@ -1225,6 +1438,774 @@ test("copy seperatly shows fallback guidance when multi-image clipboard write fa
   }
 });
 
+test("settings clear evidence files removes only uploaded Xray evidence from active workspace", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(page, {
+      activeWorkspaceId: "ws-1",
+      workspaces: [
+        {
+          id: "ws-1",
+          name: "Active Evidence Workspace",
+          sourceName: "active.md",
+          sourceType: "markdown",
+          createdAt: "2026-05-19T00:00:00.000Z",
+          updatedAt: "2026-05-19T00:00:00.000Z",
+          testCases: [
+            testCaseFixture({
+              id: "TC-001",
+              title: "Already uploaded evidence",
+              xrayUploaded: true,
+            }),
+            testCaseFixture({
+              id: "TC-002",
+              title: "Not uploaded evidence",
+              xrayUploaded: false,
+            }),
+            testCaseFixture({
+              id: "TC-003",
+              title: "Uploaded with no evidence",
+              xrayUploaded: true,
+              images: [],
+            }),
+          ],
+        },
+        {
+          id: "ws-2",
+          name: "Inactive Evidence Workspace",
+          sourceName: "inactive.md",
+          sourceType: "markdown",
+          createdAt: "2026-05-19T00:00:00.000Z",
+          updatedAt: "2026-05-19T00:00:00.000Z",
+          testCases: [
+            testCaseFixture({
+              id: "TC-004",
+              title: "Inactive uploaded evidence",
+              xrayUploaded: true,
+            }),
+          ],
+        },
+      ],
+    });
+    await page.addInitScript(() => {
+      window.__confirmCalls = 0;
+      window.confirm = () => {
+        window.__confirmCalls += 1;
+        return true;
+      };
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+
+    await assert.equal(
+      await page.locator("#clearUploadedEvidenceFilesBtn").textContent(),
+      "clear evidence files",
+    );
+    await assert.doesNotReject(
+      page
+        .getByText(
+          "Clears saved evidence images only for TCs checked as Uploaded in Xray in the active workspace.",
+        )
+        .waitFor(),
+    );
+
+    await assert.deepEqual(await readStoredImageKeys(page), [
+      "ws-1/TC-001/img-1",
+      "ws-1/TC-002/img-1",
+      "ws-2/TC-004/img-1",
+    ]);
+
+    await page.locator("#clearUploadedEvidenceFilesBtn").click();
+    await page
+      .locator(".toast", {
+        hasText: "Cleared 1 evidence image from 1 uploaded Xray TC.",
+      })
+      .waitFor();
+
+    assert.equal(await page.evaluate(() => window.__confirmCalls), 1);
+    await assert.equal(
+      await page.locator('article[data-tc="TC-001"] .image-card').count(),
+      0,
+    );
+    await assert.equal(
+      await page.locator('article[data-tc="TC-002"] .image-card').count(),
+      1,
+    );
+    await assert.deepEqual(await readStoredImageKeys(page), [
+      "ws-1/TC-002/img-1",
+      "ws-2/TC-004/img-1",
+    ]);
+
+    const storedState = await readStoredState(page);
+    const activeWorkspace = storedState.workspaces.find((ws) => ws.id === "ws-1");
+    const inactiveWorkspace = storedState.workspaces.find((ws) => ws.id === "ws-2");
+    assert.equal(activeWorkspace.remoteStatus, "modified");
+    assert.deepEqual(
+      activeWorkspace.testCases.map((tc) => [tc.id, tc.xrayUploaded, tc.images.length]),
+      [
+        ["TC-001", true, 0],
+        ["TC-002", false, 1],
+        ["TC-003", true, 0],
+      ],
+    );
+    assert.deepEqual(
+      inactiveWorkspace.testCases.map((tc) => [tc.id, tc.xrayUploaded, tc.images.length]),
+      [["TC-004", true, 1]],
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("settings clear evidence files cancel keeps uploaded evidence files", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Already uploaded evidence",
+          xrayUploaded: true,
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.__confirmCalls = 0;
+      window.confirm = () => {
+        window.__confirmCalls += 1;
+        return false;
+      };
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.locator("#clearUploadedEvidenceFilesBtn").click();
+
+    assert.equal(await page.evaluate(() => window.__confirmCalls), 1);
+    await assert.deepEqual(await readStoredImageKeys(page), ["ws-1/TC-001/img-1"]);
+    const storedState = await readStoredState(page);
+    assert.equal(storedState.workspaces[0].testCases[0].images.length, 1);
+    await assert.equal(
+      await page.locator('article[data-tc="TC-001"] .image-card').count(),
+      1,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("settings clear evidence files shows no-op toast when no uploaded evidence files match", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Not uploaded evidence",
+          xrayUploaded: false,
+        }),
+        testCaseFixture({
+          id: "TC-002",
+          title: "Uploaded with no evidence",
+          xrayUploaded: true,
+          images: [],
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.__confirmCalls = 0;
+      window.confirm = () => {
+        window.__confirmCalls += 1;
+        return true;
+      };
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.locator("#clearUploadedEvidenceFilesBtn").click();
+    await page
+      .locator(".toast", {
+        hasText: "No uploaded Xray evidence files to clear.",
+      })
+      .waitFor();
+
+    assert.equal(await page.evaluate(() => window.__confirmCalls), 0);
+    await assert.deepEqual(await readStoredImageKeys(page), ["ws-1/TC-001/img-1"]);
+    const storedState = await readStoredState(page);
+    assert.deepEqual(
+      storedState.workspaces[0].testCases.map((tc) => [tc.id, tc.images.length]),
+      [
+        ["TC-001", 1],
+        ["TC-002", 0],
+      ],
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("failed testcase report bug popup saves editable bug info", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Failed upload evidence",
+          precondition: "User is on the upload page.",
+          steps: ["Choose a file", "Click Upload"],
+          expectedResult: "The file uploads successfully.",
+          actualResult: "Upload failed with a server error.",
+          status: "fail",
+        }),
+        testCaseFixture({
+          id: "TC-002",
+          title: "Passed evidence",
+          status: "pass",
+        }),
+      ]),
+    );
+
+    await page.goto(htmlUrl);
+
+    const reportBug = page.locator(
+      'button[data-action="report-bug"][data-tc="TC-001"]',
+    );
+    await assert.doesNotReject(reportBug.waitFor());
+    await assert.equal(
+      await page
+        .locator('button[data-action="report-bug"][data-tc="TC-002"]')
+        .count(),
+      0,
+    );
+
+    await reportBug.click();
+    const dialog = page.locator("#bugReportDialog");
+    await assert.equal(await dialog.getAttribute("aria-hidden"), "false");
+    await assert.equal(
+      await dialog.getByRole("button", { name: "Cancel" }).count(),
+      1,
+    );
+    await assert.equal(
+      await page.locator("#bugReportCopyBtn").getAttribute("class"),
+      "warning",
+    );
+    await assert.equal(
+      await page.locator("#bugReportCopyPicBtn").getAttribute("class"),
+      "success",
+    );
+    await assert.equal(
+      await page.locator("#bugReportSaveBtn").getAttribute("class"),
+      "success",
+    );
+    await assert.equal(
+      await page.locator("#bugReportCancelBtn").getAttribute("class"),
+      "danger small",
+    );
+    await assert.equal(await page.locator("#bugReportEnv").inputValue(), "");
+    await assert.equal(
+      await page.locator("#bugReportPrecondition").inputValue(),
+      "User is on the upload page.",
+    );
+    await assert.equal(
+      await page.locator("#bugReportSteps").inputValue(),
+      "1. Choose a file\n2. Click Upload",
+    );
+    await assert.equal(
+      await page.locator("#bugReportActualResult").inputValue(),
+      "Upload failed with a server error.",
+    );
+    await assert.equal(
+      await page.locator("#bugReportExpectedResult").inputValue(),
+      "The file uploads successfully.",
+    );
+
+    await page.locator("#bugReportEnv").fill("QA");
+    await page.locator("#bugReportExpectedResult").fill("Saved expected value.");
+    await page.locator("#bugReportSaveBtn").click();
+    await page.locator(".toast", { hasText: "Bug report info saved" }).waitFor();
+
+    await page.reload();
+    await page
+      .locator('button[data-action="report-bug"][data-tc="TC-001"]')
+      .click();
+    await assert.equal(await page.locator("#bugReportEnv").inputValue(), "QA");
+    await assert.equal(
+      await page.locator("#bugReportExpectedResult").inputValue(),
+      "Saved expected value.",
+    );
+
+    await page.locator("#bugReportEnv").fill("Cancelled edit");
+    await page.locator("#bugReportCancelBtn").click();
+    await page
+      .locator('button[data-action="report-bug"][data-tc="TC-001"]')
+      .click();
+    await assert.equal(await page.locator("#bugReportEnv").inputValue(), "QA");
+  } finally {
+    await browser.close();
+  }
+});
+
+test("copy info copies only bug report text and works without screenshots", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.addInitScript((workspace) => {
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          async writeText(text) {
+            window.__clipboardTextWrites = window.__clipboardTextWrites || [];
+            window.__clipboardTextWrites.push(text);
+          },
+          async write(items) {
+            window.__clipboardWrites = window.__clipboardWrites || [];
+            window.__clipboardWrites.push(items);
+          },
+        },
+        configurable: true,
+      });
+
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1",
+        JSON.stringify(workspace),
+      );
+    }, workspaceWithUploadedCases([
+      testCaseFixture({
+        id: "TC-001",
+        status: "fail",
+        expectedResult: "Default expected result.",
+        images: [],
+        bugReport: {
+          env: "Stage",
+          precondition: "Saved precondition.",
+          stepsToReproduce: "1. Saved step",
+          actualResult: "Saved actual result.",
+          expectedResult: "Saved expected result.",
+        },
+      }),
+    ]));
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="report-bug"][data-tc="TC-001"]')
+      .click();
+    await page.locator("#bugReportActualResult").fill("Edited actual result.");
+    await page.locator("#bugReportCopyBtn").click();
+    await page.waitForFunction(
+      () => window.__clipboardTextWrites?.length === 1,
+    );
+
+    const payload = await page.evaluate(() => {
+      return {
+        imageWriteCount: window.__clipboardWrites?.length || 0,
+        text: window.__clipboardTextWrites[0],
+      };
+    });
+
+    assert.equal(payload.imageWriteCount, 0);
+    assert.match(payload.text, /Env:\nStage/);
+    assert.match(payload.text, /Precondition:\nSaved precondition\./);
+    assert.match(payload.text, /Steps to Reproduce:\n1\. Saved step/);
+    assert.match(payload.text, /Actual Result:\nEdited actual result\./);
+    assert.match(payload.text, /Expected Result:\nSaved expected result\./);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("copy pic copies the same merged evidence image without text", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.addInitScript((workspace) => {
+      class ClipboardItemStub {
+        constructor(items) {
+          this.items = items;
+        }
+      }
+
+      Object.defineProperty(window, "ClipboardItem", {
+        value: ClipboardItemStub,
+        configurable: true,
+      });
+
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          async writeText(text) {
+            window.__clipboardTextWrites = window.__clipboardTextWrites || [];
+            window.__clipboardTextWrites.push(text);
+          },
+          async write(items) {
+            window.__clipboardWrites = window.__clipboardWrites || [];
+            window.__clipboardWrites.push(items);
+          },
+        },
+        configurable: true,
+      });
+
+      const fillText = CanvasRenderingContext2D.prototype.fillText;
+      window.__canvasFillText = [];
+      CanvasRenderingContext2D.prototype.fillText = function patchedFillText(
+        text,
+        x,
+        y,
+        maxWidth,
+      ) {
+        window.__canvasFillText.push(String(text));
+        return fillText.call(this, text, x, y, maxWidth);
+      };
+
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1",
+        JSON.stringify(workspace),
+      );
+    }, workspaceWithUploadedCases([
+      testCaseFixture({
+        id: "TC-001",
+        title: "Failed upload evidence",
+        status: "fail",
+        actualResult: "Upload failed.",
+        images: [
+          {
+            id: "img-1",
+            dataUrl: onePixelPng,
+            note: "First screen is the upload form.",
+            createdAt: "2026-05-19T00:01:00.000Z",
+          },
+          {
+            id: "img-2",
+            dataUrl: onePixelPng,
+            note: "Second screen shows the error.",
+            createdAt: "2026-05-19T00:02:00.000Z",
+          },
+        ],
+      }),
+    ]));
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="report-bug"][data-tc="TC-001"]')
+      .click();
+    await page.locator("#bugReportCopyPicBtn").click();
+    await page.waitForFunction(() => window.__clipboardWrites?.length === 1);
+
+    const popupPayload = await page.evaluate(() => ({
+      types: Object.keys(window.__clipboardWrites[0][0].items).sort(),
+      textWriteCount: window.__clipboardTextWrites?.length || 0,
+      canvasText: [...window.__canvasFillText],
+    }));
+
+    await page.evaluate(() => {
+      window.__canvasFillText = [];
+    });
+    await page.locator("#bugReportCancelBtn").click();
+    await page.locator('button[data-action="copy-all"][data-tc="TC-001"]').click();
+    await page.waitForFunction(() => window.__clipboardWrites?.length === 2);
+
+    const tcEvidenceCanvasText = await page.evaluate(() => [
+      ...window.__canvasFillText,
+    ]);
+
+    assert.deepEqual(popupPayload.types, ["image/png"]);
+    assert.equal(popupPayload.textWriteCount, 0);
+    assert.deepEqual(popupPayload.canvasText, tcEvidenceCanvasText);
+    assert.ok(popupPayload.canvasText.includes("TC-001: Failed upload evidence"));
+    assert.ok(popupPayload.canvasText.includes("First screen is the upload form."));
+    assert.ok(popupPayload.canvasText.includes("Second screen shows the error."));
+  } finally {
+    await browser.close();
+  }
+});
+
+test("copy pic requires testcase evidence screenshots", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.addInitScript((workspace) => {
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          async write(items) {
+            window.__clipboardWrites = window.__clipboardWrites || [];
+            window.__clipboardWrites.push(items);
+          },
+          async writeText(text) {
+            window.__clipboardTextWrites = window.__clipboardTextWrites || [];
+            window.__clipboardTextWrites.push(text);
+          },
+        },
+        configurable: true,
+      });
+
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1",
+        JSON.stringify(workspace),
+      );
+    }, workspaceWithUploadedCases([
+      testCaseFixture({
+        id: "TC-001",
+        status: "fail",
+        images: [],
+      }),
+    ]));
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="report-bug"][data-tc="TC-001"]')
+      .click();
+    await page.locator("#bugReportCopyPicBtn").click();
+    await page.locator(".toast", { hasText: "No evidence to copy" }).waitFor();
+    await assert.equal(
+      await page.evaluate(() => window.__clipboardWrites?.length || 0),
+      0,
+    );
+    await assert.equal(
+      await page.evaluate(() => window.__clipboardTextWrites?.length || 0),
+      0,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("standalone bug reporter opens empty without save and clears on close", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.goto(htmlUrl);
+
+    const standaloneButton = page.locator("#bugReporterOpenBtn");
+    await assert.doesNotReject(standaloneButton.waitFor());
+    await assert.equal(
+      await page.locator("#settingsDrawerOpenBtn").evaluate((button) => {
+        return button.previousElementSibling?.id;
+      }),
+      "bugReporterOpenBtn",
+    );
+
+    await standaloneButton.click();
+    const dialog = page.locator("#bugReportDialog");
+    await assert.equal(await dialog.getAttribute("aria-hidden"), "false");
+    await assert.equal(await page.locator("#bugReportSaveBtn").isVisible(), false);
+    await assert.doesNotReject(
+      page.locator("#bugReportTempWarning", { hasText: "not saved" }).waitFor(),
+    );
+    await assert.equal(await page.locator("#bugReportEnv").inputValue(), "");
+    await assert.equal(
+      await page.locator("#bugReportPrecondition").inputValue(),
+      "",
+    );
+    await assert.equal(await page.locator("#bugReportSteps").inputValue(), "");
+    await assert.equal(
+      await page.locator("#bugReportActualResult").inputValue(),
+      "",
+    );
+    await assert.equal(
+      await page.locator("#bugReportExpectedResult").inputValue(),
+      "",
+    );
+
+    await page.locator("#bugReportEnv").fill("Standalone QA");
+    await page.locator("#standaloneBugReportDropzone").evaluate(
+      async (zone, dataUrl) => {
+        const blob = await (await fetch(dataUrl)).blob();
+        const file = new File([blob], "standalone.png", { type: "image/png" });
+        const clipboardData = new DataTransfer();
+        clipboardData.items.add(file);
+        zone.dispatchEvent(
+          new ClipboardEvent("paste", {
+            bubbles: true,
+            cancelable: true,
+            clipboardData,
+          }),
+        );
+      },
+      onePixelPng,
+    );
+    await page.locator("#standaloneBugReportImages .image-card").first().waitFor();
+
+    await page.locator("#bugReportCancelBtn").click();
+    await standaloneButton.click();
+    await assert.equal(await page.locator("#bugReportEnv").inputValue(), "");
+    await assert.equal(
+      await page.locator("#standaloneBugReportImages .image-card").count(),
+      0,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("standalone copy info writes only manual bug report text", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          async writeText(text) {
+            window.__clipboardTextWrites = window.__clipboardTextWrites || [];
+            window.__clipboardTextWrites.push(text);
+          },
+          async write(items) {
+            window.__clipboardWrites = window.__clipboardWrites || [];
+            window.__clipboardWrites.push(items);
+          },
+        },
+        configurable: true,
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#bugReporterOpenBtn").click();
+    await page.locator("#bugReportEnv").fill("Production");
+    await page.locator("#bugReportPrecondition").fill("User is signed in.");
+    await page.locator("#bugReportSteps").fill("1. Open dashboard\n2. Click Export");
+    await page.locator("#bugReportActualResult").fill("Export fails.");
+    await page.locator("#bugReportExpectedResult").fill("CSV downloads.");
+    await page.locator("#bugReportCopyBtn").click();
+    await page.waitForFunction(() => window.__clipboardTextWrites?.length === 1);
+
+    const payload = await page.evaluate(() => ({
+      imageWriteCount: window.__clipboardWrites?.length || 0,
+      text: window.__clipboardTextWrites[0],
+    }));
+
+    assert.equal(payload.imageWriteCount, 0);
+    assert.equal(
+      payload.text,
+      [
+        "Env:\nProduction",
+        "Precondition:\nUser is signed in.",
+        "Steps to Reproduce:\n1. Open dashboard\n2. Click Export",
+        "Actual Result:\nExport fails.",
+        "Expected Result:\nCSV downloads.",
+      ].join("\n\n"),
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("standalone copy pic merges pasted screenshots without text", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.addInitScript(() => {
+      class ClipboardItemStub {
+        constructor(items) {
+          this.items = items;
+        }
+      }
+
+      Object.defineProperty(window, "ClipboardItem", {
+        value: ClipboardItemStub,
+        configurable: true,
+      });
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          async writeText(text) {
+            window.__clipboardTextWrites = window.__clipboardTextWrites || [];
+            window.__clipboardTextWrites.push(text);
+          },
+          async write(items) {
+            window.__clipboardWrites = window.__clipboardWrites || [];
+            window.__clipboardWrites.push(items);
+          },
+        },
+        configurable: true,
+      });
+
+      const fillText = CanvasRenderingContext2D.prototype.fillText;
+      window.__canvasFillText = [];
+      CanvasRenderingContext2D.prototype.fillText = function patchedFillText(
+        text,
+        x,
+        y,
+        maxWidth,
+      ) {
+        window.__canvasFillText.push(String(text));
+        return fillText.call(this, text, x, y, maxWidth);
+      };
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#bugReporterOpenBtn").click();
+    await page.locator("#standaloneBugReportDropzone").evaluate(
+      async (zone, dataUrl) => {
+        const clipboardData = new DataTransfer();
+        for (const name of ["first.png", "second.png"]) {
+          const blob = await (await fetch(dataUrl)).blob();
+          clipboardData.items.add(
+            new File([blob], name, { type: "image/png" }),
+          );
+        }
+        zone.dispatchEvent(
+          new ClipboardEvent("paste", {
+            bubbles: true,
+            cancelable: true,
+            clipboardData,
+          }),
+        );
+      },
+      onePixelPng,
+    );
+    await page
+      .locator("#standaloneBugReportImages .image-card")
+      .nth(1)
+      .waitFor();
+
+    await page
+      .locator('textarea[data-action="standalone-bug-image-note"][data-index="0"]')
+      .fill("First standalone screen.");
+    await page
+      .locator('textarea[data-action="standalone-bug-image-note"][data-index="1"]')
+      .fill("Second standalone screen.");
+    await page
+      .locator('button[data-action="standalone-bug-move-down"][data-index="0"]')
+      .click();
+    await page.locator("#bugReportActualResult").fill("Manual bug failed.");
+    await page.locator("#bugReportCopyPicBtn").click();
+    await page.waitForFunction(() => window.__clipboardWrites?.length === 1);
+
+    const payload = await page.evaluate(() => ({
+      types: Object.keys(window.__clipboardWrites[0][0].items).sort(),
+      textWriteCount: window.__clipboardTextWrites?.length || 0,
+      canvasText: [...window.__canvasFillText],
+    }));
+
+    assert.deepEqual(payload.types, ["image/png"]);
+    assert.equal(payload.textWriteCount, 0);
+    assert.ok(payload.canvasText.includes("Bug Report: Manual report"));
+    assert.ok(payload.canvasText.includes("Manual bug failed."));
+    assert.ok(payload.canvasText.includes("Second standalone screen."));
+    assert.ok(payload.canvasText.includes("First standalone screen."));
+    assert.ok(
+      payload.canvasText.indexOf("Second standalone screen.") <
+        payload.canvasText.indexOf("First standalone screen."),
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
 test("help icon opens the embedded user manual with setup guidance", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
@@ -1260,6 +2241,21 @@ test("help icon opens the embedded user manual with setup guidance", async () =>
       helpDialog
         .getByText("Create a Personal Access Token with gist scope")
         .waitFor(),
+    );
+    await assert.doesNotReject(
+      helpDialog.getByText("Bug Reporting").waitFor(),
+    );
+    await assert.doesNotReject(
+      helpDialog.getByText("Bug Reporter button").waitFor(),
+    );
+    await assert.doesNotReject(
+      helpDialog.getByText("Report Bug").first().waitFor(),
+    );
+    await assert.doesNotReject(
+      helpDialog.getByText("Copy info").first().waitFor(),
+    );
+    await assert.doesNotReject(
+      helpDialog.getByText("Copy pic").first().waitFor(),
     );
   } finally {
     await browser.close();

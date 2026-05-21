@@ -479,9 +479,14 @@ async function searchVisibleTable(page, text) {
     logDebug("search input not found", { text });
     return;
   }
-  logDebug("searching visible table", { text });
-  await clearAndFillSearch(page, search, text);
-  await waitForRowsToReflectSearch(page, text);
+  const queries = searchQueriesForText(text);
+  for (const query of queries) {
+    logDebug("searching visible table", { text, query });
+    await clearAndFillSearch(page, search, query);
+    if (await waitForRowsToReflectSearch(page, text)) {
+      return;
+    }
+  }
 }
 
 async function clearAndFillSearch(page, search, text) {
@@ -516,7 +521,7 @@ async function waitForRowsToReflectSearch(page, text) {
     );
     if (reflected) {
       logDebug("search results reflected query", { text, samples });
-      return;
+      return true;
     }
   }
 
@@ -524,6 +529,17 @@ async function waitForRowsToReflectSearch(page, text) {
     text,
     samples: lastSamples,
   });
+  return false;
+}
+
+function searchQueriesForText(text) {
+  const value = String(text || "").replace(/\s+/g, " ").trim();
+  const slashSafe = value.replace(/[\\/]+/g, " ").replace(/\s+/g, " ").trim();
+  const queries = [value];
+  if (slashSafe && normalizeForMatch(slashSafe) !== normalizeForMatch(value)) {
+    queries.push(slashSafe);
+  }
+  return [...new Set(queries.filter(Boolean))];
 }
 
 async function findUniqueRowByText(page, expectedText, label) {
