@@ -1734,9 +1734,6 @@
           saveWorkflowSettingsBtn: $("saveWorkflowSettingsBtn"),
         };
 
-        let periodicSyncTimer = null;
-        const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-
         applyTheme(loadTheme());
         bindGlobalEvents();
         loadWorkflowSettings();
@@ -3956,8 +3953,6 @@
           } catch (e) {
             /* ignore */
           }
-          // start periodic sync if configured
-          try { startPeriodicSync(); } catch (e) { /* ignore */ }
         }
 
         async function saveGistSettings() {
@@ -4016,7 +4011,6 @@
             gistId,
           };
           localStorage.setItem(STORAGE_KEY + "-gist", JSON.stringify(payload));
-          try { startPeriodicSync(); } catch (e) { /* ignore */ }
           toast("GitHub Gist settings saved.");
         }
 
@@ -4109,26 +4103,6 @@
           };
           if (token) hdr["Authorization"] = `token ${token}`;
           return hdr;
-        }
-
-        function startPeriodicSync() {
-          try {
-            stopPeriodicSync();
-            const gistId = (els.gistId?.value || "").trim();
-            if (!gistId) return;
-            periodicSyncTimer = setInterval(() => {
-              syncFromGist({ silent: true }).catch((e) => console.warn(e));
-            }, AUTO_SYNC_INTERVAL_MS);
-          } catch (e) {
-            console.warn("startPeriodicSync failed", e);
-          }
-        }
-
-        function stopPeriodicSync() {
-          if (periodicSyncTimer) {
-            clearInterval(periodicSyncTimer);
-            periodicSyncTimer = null;
-          }
         }
 
         async function syncFromGist(options = {}) {

@@ -360,6 +360,62 @@ test("settings Push to Gist keeps the existing confirmation", async () => {
   }
 });
 
+test("saved Gist settings do not start automatic sync on load or save", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let gistGetCount = 0;
+
+  try {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1-gist",
+        JSON.stringify({
+          username: "octocat",
+          token: "token-1",
+          gistId: "gist-1",
+        }),
+      );
+      window.__gistAutoSyncTimerCount = 0;
+      window.setInterval = (handler, timeout, ...args) => {
+        window.__gistAutoSyncTimerCount += 1;
+        if (typeof handler === "function") handler(...args);
+        return 1;
+      };
+      window.clearInterval = () => {};
+    });
+    await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        gistGetCount += 1;
+        await route.fulfill({
+          json: {
+            id: "gist-1",
+            files: {
+              "workspaces.json": {
+                content: JSON.stringify({ workspaces: [] }),
+              },
+            },
+          },
+        });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.locator("#saveGistBtn").click();
+    await page.waitForTimeout(100);
+
+    assert.equal(
+      await page.evaluate(() => window.__gistAutoSyncTimerCount),
+      0,
+    );
+    assert.equal(gistGetCount, 0);
+  } finally {
+    await browser.close();
+  }
+});
+
 test("workflow result marks uploaded only after a successful matching result", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
