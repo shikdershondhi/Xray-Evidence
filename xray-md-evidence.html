@@ -120,7 +120,7 @@
       .topbar {
         max-width: 1440px;
         margin: 0 auto;
-        padding: 12px 174px 12px 18px;
+        padding: 12px 312px 12px 18px;
       }
 
       .title-row {
@@ -279,6 +279,20 @@
 
       .settings-toggle {
         right: 122px;
+      }
+
+      .bug-reporter-toggle {
+        right: 174px;
+        width: auto;
+        min-width: 124px;
+        border-color: transparent;
+        background: var(--blue);
+        color: #fff;
+        padding: 0 12px;
+      }
+
+      .bug-reporter-toggle:hover {
+        background: var(--blue-dark);
       }
 
       .settings-drawer {
@@ -639,6 +653,53 @@
         padding: 2px 4px;
       }
 
+      .bug-report-panel {
+        max-height: calc(100vh - 104px);
+        overflow: auto;
+        overscroll-behavior: contain;
+        width: min(720px, 100%);
+      }
+
+      .bug-report-form {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+      }
+
+      .bug-report-form label {
+        display: grid;
+        gap: 6px;
+      }
+
+      .bug-report-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 10px;
+        border-top: 1px solid var(--line);
+        background: var(--panel-2);
+        padding: 14px 16px;
+      }
+
+      .bug-report-warning {
+        margin: 0 16px 12px;
+        border: 1px solid rgba(243, 179, 61, 0.85);
+        border-radius: var(--radius);
+        background: rgba(243, 179, 61, 0.24);
+        color: var(--ink);
+        padding: 10px 12px;
+        font-size: 13px;
+        font-weight: 650;
+        line-height: 1.45;
+      }
+
+      .bug-report-evidence {
+        display: grid;
+        gap: 12px;
+        border-top: 1px solid var(--line);
+        padding: 16px;
+      }
+
       main {
         max-width: 1440px;
         margin: 0 auto;
@@ -928,7 +989,8 @@
       }
 
       .actual-input,
-      .note-input {
+      .note-input,
+      .bug-report-input {
         width: 100%;
         border: 1px solid var(--line);
         border-radius: var(--radius);
@@ -1232,7 +1294,7 @@
           padding-right: 12px;
         }
         .topbar {
-          padding-right: 154px;
+          padding-right: 282px;
         }
         .toolbar,
         .status-grid,
@@ -1267,6 +1329,13 @@
         }
         .settings-toggle {
           right: 108px;
+        }
+        .bug-reporter-toggle {
+          right: 156px;
+          width: auto;
+          min-width: 112px;
+          padding: 0 10px;
+          font-size: 12px;
         }
         .settings-drawer {
           grid-template-columns: 1fr;
@@ -1333,6 +1402,15 @@
         </svg>
       </button>
       <button
+        id="bugReporterOpenBtn"
+        class="theme-toggle bug-reporter-toggle"
+        type="button"
+        aria-label="Open standalone bug reporter"
+        title="Open standalone bug reporter"
+      >
+        Bug Reporter
+      </button>
+      <button
         id="settingsDrawerOpenBtn"
         class="theme-toggle settings-toggle"
         type="button"
@@ -1391,6 +1469,10 @@
               <li>Paste screenshots into the correct TC paste area.</li>
               <li>Add notes and Actual Result text when needed.</li>
               <li>Reorder screenshots with Up or Down.</li>
+              <li>
+                Mark failed test cases as Fail, then use Report Bug to save
+                bug report fields or copy bug report text and pictures.
+              </li>
               <li>Use Copy TC Evidence for one reliable combined image.</li>
               <li>
                 Use copy seperatly to try separate screenshot clipboard items,
@@ -1413,6 +1495,39 @@
               <li>
                 If Jira Xray pastes only one item or the clipboard is rejected,
                 use Copy TC Evidence.
+              </li>
+              <li>
+                In Report Bug, Copy info copies only bug report text. Copy pic
+                copies the TC's saved evidence screenshots as one image.
+              </li>
+            </ul>
+          </section>
+          <section class="help-section">
+            <h3>Bug Reporting</h3>
+            <ul>
+              <li>
+                Use the top-bar Bug Reporter button for a standalone manual bug
+                report without loading a testcase file.
+              </li>
+              <li>
+                Fill Env, Precondition, Steps to Reproduce, Actual Result, and
+                Expected Result.
+              </li>
+              <li>
+                Copy info copies formatted bug report text. Copy pic copies
+                pasted screenshots as one combined image.
+              </li>
+              <li>
+                Pasted screenshots can have notes, be reordered, copied one at a
+                time, or deleted before copying the combined picture.
+              </li>
+              <li>
+                Standalone bug reports are temporary and clear when the popup
+                closes.
+              </li>
+              <li>
+                Failed TC Report Bug forms pre-fill from the testcase and Save
+                keeps edited bug report fields in this browser workspace.
               </li>
             </ul>
           </section>
@@ -1468,6 +1583,64 @@
               missing screenshots.
             </p>
           </section>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="bugReportDialog"
+      class="help-dialog hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="bugReportDialogTitle"
+      aria-hidden="true"
+    >
+      <div class="help-panel bug-report-panel">
+        <div class="help-head">
+          <h2 id="bugReportDialogTitle">Report Bug</h2>
+          <button id="bugReportCancelBtn" class="danger small" type="button">
+            Cancel
+          </button>
+        </div>
+        <div class="bug-report-form">
+          <label>
+            <span class="detail-label">Env</span>
+            <textarea id="bugReportEnv" class="bug-report-input" rows="2"></textarea>
+          </label>
+          <label>
+            <span class="detail-label">Precondition</span>
+            <textarea id="bugReportPrecondition" class="bug-report-input" rows="3"></textarea>
+          </label>
+          <label>
+            <span class="detail-label">Steps to Reproduce</span>
+            <textarea id="bugReportSteps" class="bug-report-input" rows="5"></textarea>
+          </label>
+          <label>
+            <span class="detail-label">Actual Result</span>
+            <textarea id="bugReportActualResult" class="bug-report-input" rows="3"></textarea>
+          </label>
+          <label>
+            <span class="detail-label">Expected Result</span>
+            <textarea id="bugReportExpectedResult" class="bug-report-input" rows="3"></textarea>
+          </label>
+        </div>
+        <p id="bugReportTempWarning" class="bug-report-warning hidden">
+          This standalone bug report is not saved. Pasted screenshots are temporary and are cleared when this popup closes.
+        </p>
+        <div id="standaloneBugReportEvidence" class="bug-report-evidence hidden">
+          <div
+            id="standaloneBugReportDropzone"
+            class="dropzone"
+            tabindex="0"
+          >
+            Click here, then paste screenshots with Ctrl+V. Screenshots stay only until this popup closes.
+          </div>
+          <div id="standaloneBugReportImages" class="images"></div>
+        </div>
+        <div class="bug-report-actions">
+          <button id="bugReportCopyBtn" class="warning" type="button">Copy info</button>
+          <button id="bugReportCopyPicBtn" class="success" type="button">Copy pic</button>
+          <button id="bugReportSaveBtn" class="success" type="button">Save</button>
         </div>
       </div>
     </div>
@@ -1701,6 +1874,22 @@
           helpDialog: $("helpDialog"),
           helpCloseBtn: $("helpCloseBtn"),
           runSetupBtn: $("runSetupBtn"),
+          bugReporterOpenBtn: $("bugReporterOpenBtn"),
+          bugReportDialog: $("bugReportDialog"),
+          bugReportDialogTitle: $("bugReportDialogTitle"),
+          bugReportCancelBtn: $("bugReportCancelBtn"),
+          bugReportCopyBtn: $("bugReportCopyBtn"),
+          bugReportCopyPicBtn: $("bugReportCopyPicBtn"),
+          bugReportSaveBtn: $("bugReportSaveBtn"),
+          bugReportTempWarning: $("bugReportTempWarning"),
+          standaloneBugReportEvidence: $("standaloneBugReportEvidence"),
+          standaloneBugReportDropzone: $("standaloneBugReportDropzone"),
+          standaloneBugReportImages: $("standaloneBugReportImages"),
+          bugReportEnv: $("bugReportEnv"),
+          bugReportPrecondition: $("bugReportPrecondition"),
+          bugReportSteps: $("bugReportSteps"),
+          bugReportActualResult: $("bugReportActualResult"),
+          bugReportExpectedResult: $("bugReportExpectedResult"),
           settingsDrawerOpenBtn: $("settingsDrawerOpenBtn"),
           settingsDrawer: $("settingsDrawer"),
           settingsDrawerBackdrop: $("settingsDrawerBackdrop"),
@@ -1733,6 +1922,12 @@
           workflowSummarySetting: $("workflowSummarySetting"),
           saveWorkflowSettingsBtn: $("saveWorkflowSettingsBtn"),
         };
+
+        const STANDALONE_BUG_REPORT_WORKSPACE_ID = "standalone-bug-reporter";
+        const STANDALONE_BUG_REPORT_TC_ID = "manual";
+        const standaloneBugReport = { images: [] };
+        let activeBugReportTcId = "";
+        let activeBugReportMode = "tc";
 
         applyTheme(loadTheme());
         bindGlobalEvents();
@@ -1778,8 +1973,47 @@
           els.helpToggleBtn.addEventListener("click", openHelpDialog);
           els.helpCloseBtn.addEventListener("click", closeHelpDialog);
           els.runSetupBtn.addEventListener("click", runSetupFromManual);
+          els.bugReporterOpenBtn.addEventListener(
+            "click",
+            openStandaloneBugReportDialog,
+          );
           els.helpDialog.addEventListener("click", (event) => {
             if (event.target === els.helpDialog) closeHelpDialog();
+          });
+          els.bugReportDialog.addEventListener("click", (event) => {
+            if (event.target === els.bugReportDialog) closeBugReportDialog();
+          });
+          els.bugReportCancelBtn.addEventListener("click", closeBugReportDialog);
+          els.bugReportSaveBtn.addEventListener("click", saveBugReportFromUi);
+          els.bugReportCopyBtn.addEventListener("click", () =>
+            copyBugReportFromUi().catch(showError),
+          );
+          els.bugReportCopyPicBtn.addEventListener("click", () =>
+            copyBugReportPicFromUi().catch(showError),
+          );
+          els.standaloneBugReportDropzone.addEventListener("focus", () =>
+            els.standaloneBugReportDropzone.classList.add("active"),
+          );
+          els.standaloneBugReportDropzone.addEventListener("blur", () =>
+            els.standaloneBugReportDropzone.classList.remove("active"),
+          );
+          els.standaloneBugReportDropzone.addEventListener("paste", (event) =>
+            handleStandaloneBugReportPaste(event).catch(showError),
+          );
+          els.standaloneBugReportImages.addEventListener("click", (event) =>
+            handleStandaloneBugReportImageClick(event).catch(showError),
+          );
+          els.standaloneBugReportImages.addEventListener("paste", (event) => {
+            const input = event.target.closest(
+              'textarea[data-action="standalone-bug-image-note"]',
+            );
+            if (input) handleMarkupTextareaPaste(event, input);
+          });
+          els.standaloneBugReportImages.addEventListener("input", (event) => {
+            const input = event.target.closest(
+              'textarea[data-action="standalone-bug-image-note"]',
+            );
+            if (input) updateStandaloneBugReportImageNote(input);
           });
           els.settingsDrawerOpenBtn.addEventListener(
             "click",
@@ -1796,6 +2030,7 @@
           document.addEventListener("keydown", (event) => {
             if (event.key === "Escape") {
               closeHelpDialog();
+              closeBugReportDialog();
               closeSettingsDrawer();
             }
           });
@@ -1869,6 +2104,324 @@
           els.helpToggleBtn.focus();
         }
 
+        function openBugReportDialog(tcId) {
+          const tc = getTc(tcId);
+          if (!tc) return;
+          activeBugReportMode = "tc";
+          activeBugReportTcId = tc.id;
+          updateBugReportDialogMode();
+          const bugReport = bugReportValuesForTc(tc);
+          writeBugReportForm(bugReport);
+          showBugReportDialog();
+        }
+
+        function openStandaloneBugReportDialog() {
+          activeBugReportMode = "standalone";
+          activeBugReportTcId = "";
+          writeBugReportForm(normalizeBugReport());
+          clearStandaloneBugReportImages();
+          updateBugReportDialogMode();
+          showBugReportDialog();
+        }
+
+        function showBugReportDialog() {
+          els.bugReportDialog.classList.remove("hidden");
+          els.bugReportDialog.setAttribute("aria-hidden", "false");
+          els.bugReportEnv.focus();
+        }
+
+        function closeBugReportDialog() {
+          if (els.bugReportDialog.classList.contains("hidden")) return;
+          const tcId = activeBugReportTcId;
+          const mode = activeBugReportMode;
+          activeBugReportTcId = "";
+          els.bugReportDialog.classList.add("hidden");
+          els.bugReportDialog.setAttribute("aria-hidden", "true");
+          if (mode === "standalone") {
+            writeBugReportForm(normalizeBugReport());
+            clearStandaloneBugReportImages();
+            activeBugReportMode = "tc";
+            updateBugReportDialogMode();
+            els.bugReporterOpenBtn.focus();
+            return;
+          }
+          const reportButton = tcId
+            ? els.cards.querySelector(
+                `button[data-action="report-bug"][data-tc="${cssEscape(tcId)}"]`,
+              )
+            : null;
+          reportButton?.focus();
+        }
+
+        function updateBugReportDialogMode() {
+          const standalone = activeBugReportMode === "standalone";
+          els.bugReportDialogTitle.textContent = standalone
+            ? "Bug Reporter"
+            : "Report Bug";
+          els.bugReportSaveBtn.classList.toggle("hidden", standalone);
+          els.bugReportTempWarning.classList.toggle("hidden", !standalone);
+          els.standaloneBugReportEvidence.classList.toggle(
+            "hidden",
+            !standalone,
+          );
+        }
+
+        function bugReportValuesForTc(tc) {
+          const saved = normalizeBugReport(tc.bugReport);
+          return {
+            env: saved.env,
+            precondition: saved.precondition || tc.precondition || "",
+            stepsToReproduce:
+              saved.stepsToReproduce || numberedStepsText(tc.steps),
+            actualResult: saved.actualResult || tc.actualResult || "",
+            expectedResult: saved.expectedResult || tc.expectedResult || "",
+          };
+        }
+
+        function numberedStepsText(steps) {
+          return Array.isArray(steps)
+            ? steps
+                .map(cleanText)
+                .filter(Boolean)
+                .map((step, index) => `${index + 1}. ${step}`)
+                .join("\n")
+            : "";
+        }
+
+        function readBugReportForm() {
+          return normalizeBugReport({
+            env: els.bugReportEnv.value,
+            precondition: els.bugReportPrecondition.value,
+            stepsToReproduce: els.bugReportSteps.value,
+            actualResult: els.bugReportActualResult.value,
+            expectedResult: els.bugReportExpectedResult.value,
+          });
+        }
+
+        function writeBugReportForm(values) {
+          const report = normalizeBugReport(values);
+          els.bugReportEnv.value = report.env;
+          els.bugReportPrecondition.value = report.precondition;
+          els.bugReportSteps.value = report.stepsToReproduce;
+          els.bugReportActualResult.value = report.actualResult;
+          els.bugReportExpectedResult.value = report.expectedResult;
+        }
+
+        function saveBugReportFromUi() {
+          if (activeBugReportMode === "standalone") return;
+          if (!activeBugReportTcId) return;
+          saveBugReport(activeBugReportTcId, readBugReportForm());
+          toast("Bug report info saved.");
+        }
+
+        function saveBugReport(tcId, values) {
+          const tc = getTc(tcId);
+          if (!tc) return;
+          tc.bugReport = normalizeBugReport(values);
+          const ws = activeWorkspace();
+          if (ws) {
+            ws.updatedAt = nowIso();
+            ws.remoteStatus = "modified";
+          }
+          saveState();
+        }
+
+        async function copyBugReportFromUi() {
+          if (activeBugReportMode === "standalone") {
+            await copyTextToClipboard(bugReportPlainText(readBugReportForm()));
+            toast("Copied bug report info");
+            return;
+          }
+          if (!activeBugReportTcId) return;
+          await copyBugReportInfo(activeBugReportTcId, readBugReportForm());
+        }
+
+        async function copyBugReportInfo(tcId, values) {
+          const tc = getTc(tcId);
+          if (!tc) return;
+          await copyTextToClipboard(bugReportPlainText(values));
+          toast(`Copied ${tc.id} bug report info`);
+        }
+
+        async function copyBugReportPicFromUi() {
+          if (activeBugReportMode === "standalone") {
+            await copyStandaloneBugReportPic();
+            return;
+          }
+          if (!activeBugReportTcId) return;
+          await copyBugReportPic(activeBugReportTcId);
+        }
+
+        async function copyBugReportPic(tcId) {
+          const tc = getTc(tcId);
+          if (!tc || !tc.images.length) {
+            toast("No evidence to copy for this TC.");
+            return;
+          }
+
+          const dataUrl = await composeEvidenceImage(tc);
+          await copyDataUrlToClipboard(dataUrl);
+          toast(`Copied ${tc.id} evidence as one image`);
+        }
+
+        async function copyStandaloneBugReportPic() {
+          if (!standaloneBugReport.images.length) {
+            toast("No evidence to copy.");
+            return;
+          }
+
+          const report = readBugReportForm();
+          const dataUrl = await composeEvidenceImage({
+            id: "Bug Report",
+            title: "Manual report",
+            actualResult: report.actualResult,
+            images: standaloneBugReport.images,
+          });
+          await copyDataUrlToClipboard(dataUrl);
+          toast("Copied bug report evidence as one image");
+        }
+
+        async function handleStandaloneBugReportPaste(event) {
+          const items = Array.from(event.clipboardData?.items || []);
+          const imageItems = items.filter((item) =>
+            item.type.startsWith("image/"),
+          );
+
+          if (!imageItems.length) {
+            toast("No image found in the clipboard.");
+            return;
+          }
+
+          event.preventDefault();
+          for (const item of imageItems) {
+            const file = item.getAsFile();
+            if (!file) continue;
+            await addStandaloneBugReportImage(await fileToDataUrl(file));
+          }
+
+          renderStandaloneBugReportImages();
+          toast(
+            `Added ${imageItems.length} bug report screenshot${imageItems.length === 1 ? "" : "s"}.`,
+          );
+        }
+
+        async function addStandaloneBugReportImage(dataUrl) {
+          const image = {
+            id: cryptoId(),
+            note: "",
+            createdAt: nowIso(),
+          };
+          await saveImageData(
+            STANDALONE_BUG_REPORT_WORKSPACE_ID,
+            STANDALONE_BUG_REPORT_TC_ID,
+            image,
+            dataUrl,
+          );
+          standaloneBugReport.images.push(image);
+        }
+
+        async function handleStandaloneBugReportImageClick(event) {
+          const button = event.target.closest("button[data-action]");
+          if (!button) return;
+          const index = Number(button.dataset.index);
+          const action = button.dataset.action;
+          if (action === "standalone-bug-copy-one") {
+            await copyStandaloneBugReportImage(index);
+          }
+          if (action === "standalone-bug-delete-image") {
+            await deleteStandaloneBugReportImage(index);
+          }
+          if (action === "standalone-bug-move-up") {
+            moveStandaloneBugReportImage(index, -1);
+          }
+          if (action === "standalone-bug-move-down") {
+            moveStandaloneBugReportImage(index, 1);
+          }
+        }
+
+        function updateStandaloneBugReportImageNote(input) {
+          const index = Number(input.dataset.index);
+          const image = standaloneBugReport.images[index];
+          if (!image) return;
+          image.note = input.value;
+          const preview = els.standaloneBugReportImages.querySelector(
+            `[data-markdown-preview="standalone-bug-image-note"][data-index="${index}"]`,
+          );
+          if (preview) preview.innerHTML = renderMarkdownPreview(image.note);
+        }
+
+        async function copyStandaloneBugReportImage(index) {
+          const image = standaloneBugReport.images[index];
+          if (!image) return;
+          const dataUrl = image.note
+            ? await composeSingleEvidenceImage(image, index)
+            : await ensureImageDataUrl(image);
+          await copyDataUrlToClipboard(dataUrl);
+          toast(`Copied bug report image ${index + 1}`);
+        }
+
+        async function deleteStandaloneBugReportImage(index) {
+          const [removed] = standaloneBugReport.images.splice(index, 1);
+          if (removed) await deleteImageData(removed);
+          renderStandaloneBugReportImages();
+        }
+
+        function moveStandaloneBugReportImage(index, delta) {
+          const target = index + delta;
+          if (target < 0 || target >= standaloneBugReport.images.length) return;
+          const [image] = standaloneBugReport.images.splice(index, 1);
+          standaloneBugReport.images.splice(target, 0, image);
+          renderStandaloneBugReportImages();
+        }
+
+        function clearStandaloneBugReportImages() {
+          const images = standaloneBugReport.images.splice(0);
+          renderStandaloneBugReportImages();
+          Promise.all(images.map(deleteImageData)).catch(showError);
+        }
+
+        function renderStandaloneBugReportImages() {
+          els.standaloneBugReportImages.innerHTML = standaloneBugReport.images
+            .map(standaloneBugReportImageHtml)
+            .join("");
+        }
+
+        function standaloneBugReportImageHtml(image, index) {
+          const src = image.dataUrl || "";
+          return `<div class="image-card">
+          <img src="${src}" alt="Standalone bug report evidence ${index + 1}">
+          <div class="image-info">
+            <span class="image-name"><span class="image-order">${index + 1}</span> Image ${index + 1} · ${formatDate(image.createdAt)}</span>
+            <span class="image-tools">
+              <button class="small ghost" data-action="standalone-bug-move-up" data-index="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
+              <button class="small ghost" data-action="standalone-bug-move-down" data-index="${index}" ${index === standaloneBugReport.images.length - 1 ? "disabled" : ""}>Down</button>
+              <button class="small success" data-action="standalone-bug-copy-one" data-index="${index}">Copy</button>
+              <button class="small danger" data-action="standalone-bug-delete-image" data-index="${index}">Delete</button>
+            </span>
+          </div>
+          <div class="image-note">
+            <label>
+              <span class="detail-label">Screenshot Note</span>
+              <textarea class="note-input" rows="2" data-action="standalone-bug-image-note" data-index="${index}" placeholder="Optional note copied above this screenshot...">${escapeHtml(image.note || "")}</textarea>
+              <div class="markdown-preview" data-markdown-preview="standalone-bug-image-note" data-index="${index}">${renderMarkdownPreview(image.note)}</div>
+            </label>
+          </div>
+        </div>`;
+        }
+
+        function bugReportPlainText(values) {
+          const report = normalizeBugReport(values);
+          return [
+            ["Env", report.env],
+            ["Precondition", report.precondition],
+            ["Steps to Reproduce", report.stepsToReproduce],
+            ["Actual Result", report.actualResult],
+            ["Expected Result", report.expectedResult],
+          ]
+            .map(([label, value]) => `${label}:\n${value}`)
+            .join("\n\n");
+        }
+
         async function runSetupFromManual() {
           if (!/^https?:$/.test(window.location.protocol)) {
             toast("Open this page with npm run evidence:workflow before using Run setup.");
@@ -1938,6 +2491,7 @@
             actualResult: previousTestCases.get(tc.id)?.actualResult || "",
             status: normalizeStatus(previousTestCases.get(tc.id)?.status),
             xrayUploaded: Boolean(previousTestCases.get(tc.id)?.xrayUploaded),
+            bugReport: normalizeBugReport(previousTestCases.get(tc.id)?.bugReport),
             images: previousTestCases.get(tc.id)?.images || [],
           }));
 
@@ -1982,6 +2536,7 @@
               actualResult: "",
               status: "unset",
               xrayUploaded: false,
+              bugReport: normalizeBugReport(),
               sourceLine: index + 1,
               images: [],
             });
@@ -2081,6 +2636,7 @@
                 actualResult: "",
                 status: "unset",
                 xrayUploaded: false,
+                bugReport: normalizeBugReport(),
                 sourceLine: index + 2,
                 images: [],
               };
@@ -2361,6 +2917,7 @@
               <input type="checkbox" data-action="xray-uploaded" data-tc="${tc.id}" ${tc.xrayUploaded ? "checked" : ""}>
               Uploaded in Xray
             </label>
+            ${status === "fail" ? `<button class="small warning" data-action="report-bug" data-tc="${tc.id}" type="button">Report Bug</button>` : ""}
             <button class="small success status-save" data-action="save-to-gist" data-tc="${tc.id}" type="button">Save</button>
           </div>
         </div>`;
@@ -2651,6 +3208,7 @@
           if (action === "delete-image") deleteImage(tcId, index).catch(showError);
           if (action === "clear-tc") clearTcImages(tcId).catch(showError);
           if (action === "download-tc") downloadTcJson(tcId);
+          if (action === "report-bug") openBugReportDialog(tcId);
           if (action === "save-to-gist")
             pushToGist({ confirmBeforePush: false }).catch(showError);
         }
@@ -3760,18 +4318,25 @@
           await navigator.clipboard.write(items);
         }
 
-        async function copyDataUrlToClipboard(dataUrl, plainText = "") {
+        async function copyDataUrlToClipboard(dataUrl) {
           if (!navigator.clipboard || !window.ClipboardItem) {
             throw new Error(
               "Clipboard image writing is not supported in this browser.",
             );
           }
           const blob = await (await fetch(dataUrl)).blob();
-          const item = { [blob.type || "image/png"]: blob };
-          if (plainText) {
-            item["text/plain"] = new Blob([plainText], { type: "text/plain" });
+          await navigator.clipboard.write([
+            new ClipboardItem({ [blob.type || "image/png"]: blob }),
+          ]);
+        }
+
+        async function copyTextToClipboard(text) {
+          if (!navigator.clipboard?.writeText) {
+            throw new Error(
+              "Clipboard text writing is not supported in this browser.",
+            );
           }
-          await navigator.clipboard.write([new ClipboardItem(item)]);
+          await navigator.clipboard.writeText(text);
         }
 
         function loadState() {
@@ -4324,6 +4889,7 @@
                 actualResult: normalizeMarkupText(tc.actualResult),
                 status: normalizeStatus(tc.status),
                 xrayUploaded: Boolean(tc.xrayUploaded),
+                bugReport: normalizeBugReport(tc.bugReport),
                 sourceLine: Number(tc.sourceLine) || 0,
                 images: Array.isArray(tc.images)
                   ? tc.images
@@ -4338,6 +4904,19 @@
                   : [],
               }))
               .filter((tc) => tc.id),
+          };
+        }
+
+        function normalizeBugReport(input = {}) {
+          const value = input && typeof input === "object" ? input : {};
+          return {
+            env: normalizeMarkupText(value.env),
+            precondition: normalizeMarkupText(value.precondition),
+            stepsToReproduce: normalizeMarkupText(
+              value.stepsToReproduce || value.steps,
+            ),
+            actualResult: normalizeMarkupText(value.actualResult),
+            expectedResult: normalizeMarkupText(value.expectedResult),
           };
         }
 

@@ -1225,6 +1225,559 @@ test("copy seperatly shows fallback guidance when multi-image clipboard write fa
   }
 });
 
+test("failed testcase report bug popup saves editable bug info", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Failed upload evidence",
+          precondition: "User is on the upload page.",
+          steps: ["Choose a file", "Click Upload"],
+          expectedResult: "The file uploads successfully.",
+          actualResult: "Upload failed with a server error.",
+          status: "fail",
+        }),
+        testCaseFixture({
+          id: "TC-002",
+          title: "Passed evidence",
+          status: "pass",
+        }),
+      ]),
+    );
+
+    await page.goto(htmlUrl);
+
+    const reportBug = page.locator(
+      'button[data-action="report-bug"][data-tc="TC-001"]',
+    );
+    await assert.doesNotReject(reportBug.waitFor());
+    await assert.equal(
+      await page
+        .locator('button[data-action="report-bug"][data-tc="TC-002"]')
+        .count(),
+      0,
+    );
+
+    await reportBug.click();
+    const dialog = page.locator("#bugReportDialog");
+    await assert.equal(await dialog.getAttribute("aria-hidden"), "false");
+    await assert.equal(
+      await dialog.getByRole("button", { name: "Cancel" }).count(),
+      1,
+    );
+    await assert.equal(
+      await page.locator("#bugReportCopyBtn").getAttribute("class"),
+      "warning",
+    );
+    await assert.equal(
+      await page.locator("#bugReportCopyPicBtn").getAttribute("class"),
+      "success",
+    );
+    await assert.equal(
+      await page.locator("#bugReportSaveBtn").getAttribute("class"),
+      "success",
+    );
+    await assert.equal(
+      await page.locator("#bugReportCancelBtn").getAttribute("class"),
+      "danger small",
+    );
+    await assert.equal(await page.locator("#bugReportEnv").inputValue(), "");
+    await assert.equal(
+      await page.locator("#bugReportPrecondition").inputValue(),
+      "User is on the upload page.",
+    );
+    await assert.equal(
+      await page.locator("#bugReportSteps").inputValue(),
+      "1. Choose a file\n2. Click Upload",
+    );
+    await assert.equal(
+      await page.locator("#bugReportActualResult").inputValue(),
+      "Upload failed with a server error.",
+    );
+    await assert.equal(
+      await page.locator("#bugReportExpectedResult").inputValue(),
+      "The file uploads successfully.",
+    );
+
+    await page.locator("#bugReportEnv").fill("QA");
+    await page.locator("#bugReportExpectedResult").fill("Saved expected value.");
+    await page.locator("#bugReportSaveBtn").click();
+    await page.locator(".toast", { hasText: "Bug report info saved" }).waitFor();
+
+    await page.reload();
+    await page
+      .locator('button[data-action="report-bug"][data-tc="TC-001"]')
+      .click();
+    await assert.equal(await page.locator("#bugReportEnv").inputValue(), "QA");
+    await assert.equal(
+      await page.locator("#bugReportExpectedResult").inputValue(),
+      "Saved expected value.",
+    );
+
+    await page.locator("#bugReportEnv").fill("Cancelled edit");
+    await page.locator("#bugReportCancelBtn").click();
+    await page
+      .locator('button[data-action="report-bug"][data-tc="TC-001"]')
+      .click();
+    await assert.equal(await page.locator("#bugReportEnv").inputValue(), "QA");
+  } finally {
+    await browser.close();
+  }
+});
+
+test("copy info copies only bug report text and works without screenshots", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.addInitScript((workspace) => {
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          async writeText(text) {
+            window.__clipboardTextWrites = window.__clipboardTextWrites || [];
+            window.__clipboardTextWrites.push(text);
+          },
+          async write(items) {
+            window.__clipboardWrites = window.__clipboardWrites || [];
+            window.__clipboardWrites.push(items);
+          },
+        },
+        configurable: true,
+      });
+
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1",
+        JSON.stringify(workspace),
+      );
+    }, workspaceWithUploadedCases([
+      testCaseFixture({
+        id: "TC-001",
+        status: "fail",
+        expectedResult: "Default expected result.",
+        images: [],
+        bugReport: {
+          env: "Stage",
+          precondition: "Saved precondition.",
+          stepsToReproduce: "1. Saved step",
+          actualResult: "Saved actual result.",
+          expectedResult: "Saved expected result.",
+        },
+      }),
+    ]));
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="report-bug"][data-tc="TC-001"]')
+      .click();
+    await page.locator("#bugReportActualResult").fill("Edited actual result.");
+    await page.locator("#bugReportCopyBtn").click();
+    await page.waitForFunction(
+      () => window.__clipboardTextWrites?.length === 1,
+    );
+
+    const payload = await page.evaluate(() => {
+      return {
+        imageWriteCount: window.__clipboardWrites?.length || 0,
+        text: window.__clipboardTextWrites[0],
+      };
+    });
+
+    assert.equal(payload.imageWriteCount, 0);
+    assert.match(payload.text, /Env:\nStage/);
+    assert.match(payload.text, /Precondition:\nSaved precondition\./);
+    assert.match(payload.text, /Steps to Reproduce:\n1\. Saved step/);
+    assert.match(payload.text, /Actual Result:\nEdited actual result\./);
+    assert.match(payload.text, /Expected Result:\nSaved expected result\./);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("copy pic copies the same merged evidence image without text", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.addInitScript((workspace) => {
+      class ClipboardItemStub {
+        constructor(items) {
+          this.items = items;
+        }
+      }
+
+      Object.defineProperty(window, "ClipboardItem", {
+        value: ClipboardItemStub,
+        configurable: true,
+      });
+
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          async writeText(text) {
+            window.__clipboardTextWrites = window.__clipboardTextWrites || [];
+            window.__clipboardTextWrites.push(text);
+          },
+          async write(items) {
+            window.__clipboardWrites = window.__clipboardWrites || [];
+            window.__clipboardWrites.push(items);
+          },
+        },
+        configurable: true,
+      });
+
+      const fillText = CanvasRenderingContext2D.prototype.fillText;
+      window.__canvasFillText = [];
+      CanvasRenderingContext2D.prototype.fillText = function patchedFillText(
+        text,
+        x,
+        y,
+        maxWidth,
+      ) {
+        window.__canvasFillText.push(String(text));
+        return fillText.call(this, text, x, y, maxWidth);
+      };
+
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1",
+        JSON.stringify(workspace),
+      );
+    }, workspaceWithUploadedCases([
+      testCaseFixture({
+        id: "TC-001",
+        title: "Failed upload evidence",
+        status: "fail",
+        actualResult: "Upload failed.",
+        images: [
+          {
+            id: "img-1",
+            dataUrl: onePixelPng,
+            note: "First screen is the upload form.",
+            createdAt: "2026-05-19T00:01:00.000Z",
+          },
+          {
+            id: "img-2",
+            dataUrl: onePixelPng,
+            note: "Second screen shows the error.",
+            createdAt: "2026-05-19T00:02:00.000Z",
+          },
+        ],
+      }),
+    ]));
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="report-bug"][data-tc="TC-001"]')
+      .click();
+    await page.locator("#bugReportCopyPicBtn").click();
+    await page.waitForFunction(() => window.__clipboardWrites?.length === 1);
+
+    const popupPayload = await page.evaluate(() => ({
+      types: Object.keys(window.__clipboardWrites[0][0].items).sort(),
+      textWriteCount: window.__clipboardTextWrites?.length || 0,
+      canvasText: [...window.__canvasFillText],
+    }));
+
+    await page.evaluate(() => {
+      window.__canvasFillText = [];
+    });
+    await page.locator("#bugReportCancelBtn").click();
+    await page.locator('button[data-action="copy-all"][data-tc="TC-001"]').click();
+    await page.waitForFunction(() => window.__clipboardWrites?.length === 2);
+
+    const tcEvidenceCanvasText = await page.evaluate(() => [
+      ...window.__canvasFillText,
+    ]);
+
+    assert.deepEqual(popupPayload.types, ["image/png"]);
+    assert.equal(popupPayload.textWriteCount, 0);
+    assert.deepEqual(popupPayload.canvasText, tcEvidenceCanvasText);
+    assert.ok(popupPayload.canvasText.includes("TC-001: Failed upload evidence"));
+    assert.ok(popupPayload.canvasText.includes("First screen is the upload form."));
+    assert.ok(popupPayload.canvasText.includes("Second screen shows the error."));
+  } finally {
+    await browser.close();
+  }
+});
+
+test("copy pic requires testcase evidence screenshots", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.addInitScript((workspace) => {
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          async write(items) {
+            window.__clipboardWrites = window.__clipboardWrites || [];
+            window.__clipboardWrites.push(items);
+          },
+          async writeText(text) {
+            window.__clipboardTextWrites = window.__clipboardTextWrites || [];
+            window.__clipboardTextWrites.push(text);
+          },
+        },
+        configurable: true,
+      });
+
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1",
+        JSON.stringify(workspace),
+      );
+    }, workspaceWithUploadedCases([
+      testCaseFixture({
+        id: "TC-001",
+        status: "fail",
+        images: [],
+      }),
+    ]));
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="report-bug"][data-tc="TC-001"]')
+      .click();
+    await page.locator("#bugReportCopyPicBtn").click();
+    await page.locator(".toast", { hasText: "No evidence to copy" }).waitFor();
+    await assert.equal(
+      await page.evaluate(() => window.__clipboardWrites?.length || 0),
+      0,
+    );
+    await assert.equal(
+      await page.evaluate(() => window.__clipboardTextWrites?.length || 0),
+      0,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("standalone bug reporter opens empty without save and clears on close", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.goto(htmlUrl);
+
+    const standaloneButton = page.locator("#bugReporterOpenBtn");
+    await assert.doesNotReject(standaloneButton.waitFor());
+    await assert.equal(
+      await page.locator("#settingsDrawerOpenBtn").evaluate((button) => {
+        return button.previousElementSibling?.id;
+      }),
+      "bugReporterOpenBtn",
+    );
+
+    await standaloneButton.click();
+    const dialog = page.locator("#bugReportDialog");
+    await assert.equal(await dialog.getAttribute("aria-hidden"), "false");
+    await assert.equal(await page.locator("#bugReportSaveBtn").isVisible(), false);
+    await assert.doesNotReject(
+      page.locator("#bugReportTempWarning", { hasText: "not saved" }).waitFor(),
+    );
+    await assert.equal(await page.locator("#bugReportEnv").inputValue(), "");
+    await assert.equal(
+      await page.locator("#bugReportPrecondition").inputValue(),
+      "",
+    );
+    await assert.equal(await page.locator("#bugReportSteps").inputValue(), "");
+    await assert.equal(
+      await page.locator("#bugReportActualResult").inputValue(),
+      "",
+    );
+    await assert.equal(
+      await page.locator("#bugReportExpectedResult").inputValue(),
+      "",
+    );
+
+    await page.locator("#bugReportEnv").fill("Standalone QA");
+    await page.locator("#standaloneBugReportDropzone").evaluate(
+      async (zone, dataUrl) => {
+        const blob = await (await fetch(dataUrl)).blob();
+        const file = new File([blob], "standalone.png", { type: "image/png" });
+        const clipboardData = new DataTransfer();
+        clipboardData.items.add(file);
+        zone.dispatchEvent(
+          new ClipboardEvent("paste", {
+            bubbles: true,
+            cancelable: true,
+            clipboardData,
+          }),
+        );
+      },
+      onePixelPng,
+    );
+    await page.locator("#standaloneBugReportImages .image-card").first().waitFor();
+
+    await page.locator("#bugReportCancelBtn").click();
+    await standaloneButton.click();
+    await assert.equal(await page.locator("#bugReportEnv").inputValue(), "");
+    await assert.equal(
+      await page.locator("#standaloneBugReportImages .image-card").count(),
+      0,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("standalone copy info writes only manual bug report text", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          async writeText(text) {
+            window.__clipboardTextWrites = window.__clipboardTextWrites || [];
+            window.__clipboardTextWrites.push(text);
+          },
+          async write(items) {
+            window.__clipboardWrites = window.__clipboardWrites || [];
+            window.__clipboardWrites.push(items);
+          },
+        },
+        configurable: true,
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#bugReporterOpenBtn").click();
+    await page.locator("#bugReportEnv").fill("Production");
+    await page.locator("#bugReportPrecondition").fill("User is signed in.");
+    await page.locator("#bugReportSteps").fill("1. Open dashboard\n2. Click Export");
+    await page.locator("#bugReportActualResult").fill("Export fails.");
+    await page.locator("#bugReportExpectedResult").fill("CSV downloads.");
+    await page.locator("#bugReportCopyBtn").click();
+    await page.waitForFunction(() => window.__clipboardTextWrites?.length === 1);
+
+    const payload = await page.evaluate(() => ({
+      imageWriteCount: window.__clipboardWrites?.length || 0,
+      text: window.__clipboardTextWrites[0],
+    }));
+
+    assert.equal(payload.imageWriteCount, 0);
+    assert.equal(
+      payload.text,
+      [
+        "Env:\nProduction",
+        "Precondition:\nUser is signed in.",
+        "Steps to Reproduce:\n1. Open dashboard\n2. Click Export",
+        "Actual Result:\nExport fails.",
+        "Expected Result:\nCSV downloads.",
+      ].join("\n\n"),
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("standalone copy pic merges pasted screenshots without text", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await page.addInitScript(() => {
+      class ClipboardItemStub {
+        constructor(items) {
+          this.items = items;
+        }
+      }
+
+      Object.defineProperty(window, "ClipboardItem", {
+        value: ClipboardItemStub,
+        configurable: true,
+      });
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          async writeText(text) {
+            window.__clipboardTextWrites = window.__clipboardTextWrites || [];
+            window.__clipboardTextWrites.push(text);
+          },
+          async write(items) {
+            window.__clipboardWrites = window.__clipboardWrites || [];
+            window.__clipboardWrites.push(items);
+          },
+        },
+        configurable: true,
+      });
+
+      const fillText = CanvasRenderingContext2D.prototype.fillText;
+      window.__canvasFillText = [];
+      CanvasRenderingContext2D.prototype.fillText = function patchedFillText(
+        text,
+        x,
+        y,
+        maxWidth,
+      ) {
+        window.__canvasFillText.push(String(text));
+        return fillText.call(this, text, x, y, maxWidth);
+      };
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#bugReporterOpenBtn").click();
+    await page.locator("#standaloneBugReportDropzone").evaluate(
+      async (zone, dataUrl) => {
+        const clipboardData = new DataTransfer();
+        for (const name of ["first.png", "second.png"]) {
+          const blob = await (await fetch(dataUrl)).blob();
+          clipboardData.items.add(
+            new File([blob], name, { type: "image/png" }),
+          );
+        }
+        zone.dispatchEvent(
+          new ClipboardEvent("paste", {
+            bubbles: true,
+            cancelable: true,
+            clipboardData,
+          }),
+        );
+      },
+      onePixelPng,
+    );
+    await page
+      .locator("#standaloneBugReportImages .image-card")
+      .nth(1)
+      .waitFor();
+
+    await page
+      .locator('textarea[data-action="standalone-bug-image-note"][data-index="0"]')
+      .fill("First standalone screen.");
+    await page
+      .locator('textarea[data-action="standalone-bug-image-note"][data-index="1"]')
+      .fill("Second standalone screen.");
+    await page
+      .locator('button[data-action="standalone-bug-move-down"][data-index="0"]')
+      .click();
+    await page.locator("#bugReportActualResult").fill("Manual bug failed.");
+    await page.locator("#bugReportCopyPicBtn").click();
+    await page.waitForFunction(() => window.__clipboardWrites?.length === 1);
+
+    const payload = await page.evaluate(() => ({
+      types: Object.keys(window.__clipboardWrites[0][0].items).sort(),
+      textWriteCount: window.__clipboardTextWrites?.length || 0,
+      canvasText: [...window.__canvasFillText],
+    }));
+
+    assert.deepEqual(payload.types, ["image/png"]);
+    assert.equal(payload.textWriteCount, 0);
+    assert.ok(payload.canvasText.includes("Bug Report: Manual report"));
+    assert.ok(payload.canvasText.includes("Manual bug failed."));
+    assert.ok(payload.canvasText.includes("Second standalone screen."));
+    assert.ok(payload.canvasText.includes("First standalone screen."));
+    assert.ok(
+      payload.canvasText.indexOf("Second standalone screen.") <
+        payload.canvasText.indexOf("First standalone screen."),
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
 test("help icon opens the embedded user manual with setup guidance", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
@@ -1260,6 +1813,21 @@ test("help icon opens the embedded user manual with setup guidance", async () =>
       helpDialog
         .getByText("Create a Personal Access Token with gist scope")
         .waitFor(),
+    );
+    await assert.doesNotReject(
+      helpDialog.getByText("Bug Reporting").waitFor(),
+    );
+    await assert.doesNotReject(
+      helpDialog.getByText("Bug Reporter button").waitFor(),
+    );
+    await assert.doesNotReject(
+      helpDialog.getByText("Report Bug").first().waitFor(),
+    );
+    await assert.doesNotReject(
+      helpDialog.getByText("Copy info").first().waitFor(),
+    );
+    await assert.doesNotReject(
+      helpDialog.getByText("Copy pic").first().waitFor(),
     );
   } finally {
     await browser.close();
