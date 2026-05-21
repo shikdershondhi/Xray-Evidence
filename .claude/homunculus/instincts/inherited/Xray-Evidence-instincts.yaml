@@ -1,0 +1,299 @@
+# Instincts generated from https://github.com/shikdershondhi/Xray-Evidence
+# Generated: 2026-05-20T22:01:52.565Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: Xray-Evidence-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Commit Length
+
+## Action
+
+Write moderate-length commit messages (~68 characters)
+
+## Evidence
+
+- Average commit message length: 68 chars
+- Based on 2 commits
+
+---
+id: Xray-Evidence-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Naming Files
+
+## Action
+
+Use kebab-case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: kebab-case
+
+---
+id: Xray-Evidence-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: Xray-Evidence-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: Xray-Evidence-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: xray-evidence-instinct-file-naming
+trigger: "When creating a new source file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Instinct File Naming
+
+## Action
+
+Name the file using kebab-case
+
+## Evidence
+
+- Pattern in namingConventions.files
+
+---
+id: xray-evidence-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Instinct Function Naming
+
+## Action
+
+Use camelCase for the function name
+
+## Evidence
+
+- Pattern in namingConventions.functions
+
+---
+id: xray-evidence-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Instinct Class Naming
+
+## Action
+
+Use PascalCase for the class name
+
+## Evidence
+
+- Pattern in namingConventions.classes
+
+---
+id: xray-evidence-instinct-constant-naming
+trigger: "When declaring a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for the constant name
+
+## Evidence
+
+- Pattern in namingConventions.constants
+
+---
+id: xray-evidence-instinct-import-style
+trigger: "When importing modules"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle
+
+---
+id: xray-evidence-instinct-export-style
+trigger: "When exporting functions or variables"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle
+
+---
+id: xray-evidence-instinct-test-location
+trigger: "When adding or updating tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Instinct Test Location
+
+## Action
+
+Place test files in the separate 'tests' folder
+
+## Evidence
+
+- Pattern in architecture.folderStructure.testLocation
+- Common folder: tests
+
+---
+id: xray-evidence-instinct-commit-format
+trigger: "When writing a commit message"
+confidence: 0.8
+domain: git
+source: repo-analysis
+source_repo: shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Instinct Commit Format
+
+## Action
+
+Write a freeform message without a required prefix, typically under 70 characters
+
+## Evidence
+
+- Pattern in commits.type
+- commits.averageLength
+- commits.examples
+
+---
+id: xray-evidence-instinct-commit-detail
+trigger: "When describing a commit"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Instinct Commit Detail
+
+## Action
+
+Summarize the main change and, if relevant, mention affected files or features
+
+## Evidence
+
+- commits.examples
+
+---
+id: xray-evidence-instinct-error-handling
+trigger: "When handling errors in code"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: shikdershondhi/Xray-Evidence
+---
+
+# Xray Evidence Instinct Error Handling
+
+## Action
+
+Use try-catch blocks for error handling
+
+## Evidence
+
+- Pattern in errorHandling.style
+
