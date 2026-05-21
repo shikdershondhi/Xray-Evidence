@@ -428,6 +428,90 @@
         gap: 8px;
       }
 
+      .workspace-workflow-panel {
+        display: grid;
+        gap: 10px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+        padding: 12px;
+      }
+
+      .workspace-workflow-panel[hidden] {
+        display: none;
+      }
+
+      .workspace-workflow-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: start;
+      }
+
+      .workspace-workflow-title {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      .workspace-workflow-status {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel-2);
+        color: var(--muted);
+        padding: 4px 9px;
+        font-size: 12px;
+        font-weight: 750;
+        text-transform: uppercase;
+      }
+
+      .workspace-workflow-meta,
+      .workspace-workflow-latest {
+        color: var(--muted);
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+
+      .workspace-workflow-latest strong {
+        color: var(--ink);
+      }
+
+      .workspace-workflow-logs {
+        max-height: 180px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-2);
+        padding: 5px 10px;
+      }
+
+      .workspace-workflow-log {
+        display: grid;
+        grid-template-columns: auto auto minmax(120px, 0.35fr) minmax(0, 1fr);
+        gap: 8px;
+        align-items: start;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--line);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .workspace-workflow-log:last-child {
+        border-bottom: 0;
+      }
+
+      .workspace-workflow-log-level {
+        color: var(--muted);
+        font-weight: 750;
+        text-transform: uppercase;
+      }
+
+      .workspace-workflow-log.error {
+        color: var(--fail-ink);
+      }
+
+      .workspace-workflow-log.warn {
+        color: var(--notice-ink);
+      }
+
       .tc-workflow-panel {
         display: grid;
         gap: 10px;
@@ -1308,6 +1392,8 @@
           flex-direction: column;
         }
         .workflow-workbench-actions,
+        .workspace-workflow-head,
+        .workspace-workflow-log,
         .tc-workflow-head,
         .tc-workflow-grid {
           align-items: stretch;
@@ -1839,6 +1925,11 @@
               </button>
             </div>
           </div>
+          <div
+            id="workspaceWorkflowPanel"
+            class="workspace-workflow-panel"
+            hidden
+          ></div>
           <div id="cards" class="cards"></div>
           <div id="emptyState" class="empty">
             Load a Markdown or CSV testcase file to create reusable evidence
@@ -1879,6 +1970,12 @@
           serviceAvailable: false,
           queueActive: false,
           queueCancelRequested: false,
+          queueTotal: 0,
+          queueCurrentIndex: 0,
+          queueCurrentTcId: "",
+          queueCurrentTcTitle: "",
+          queueStartedAt: "",
+          queueResults: [],
           workflowRunsByTcId: new Map(),
           pollingTimersByRunId: new Map(),
         };
@@ -1922,6 +2019,7 @@
           exportMdBtn: $("exportMdBtn"),
           cancelWorkspaceWorkflowBtn: $("cancelWorkspaceWorkflowBtn"),
           startWorkspaceWorkflowBtn: $("startWorkspaceWorkflowBtn"),
+          workspaceWorkflowPanel: $("workspaceWorkflowPanel"),
           supportNotice: $("supportNotice"),
           workspaceName: $("workspaceName"),
           sourceName: $("sourceName"),
@@ -2777,6 +2875,7 @@
             !workspace || !totalImages || workflowState.queueActive;
           els.cancelWorkspaceWorkflowBtn.disabled =
             !workflowState.queueActive && !hasActiveWorkflowRun();
+          renderWorkspaceWorkflowPanel();
           renderWorkflowSettingsUi();
         }
 
@@ -3434,9 +3533,11 @@
 
         async function startXrayWorkflowForWorkspace() {
           const workspace = activeWorkspace();
-          const items = workspace?.testCases.filter((tc) => tc.images.length) || [];
+          const items =
+            workspace?.testCases.filter((tc) => tc.images.length && !tc.xrayUploaded) ||
+            [];
           if (!items.length) {
-            toast("No test cases with evidence to upload.");
+            toast("No test cases with evidence are pending Xray upload.");
             return;
           }
           const unsetCount = items.filter((tc) => normalizeStatus(tc.status) === "unset").length;
@@ -3451,14 +3552,26 @@
           if (workflowState.queueActive) return;
           workflowState.queueActive = true;
           workflowState.queueCancelRequested = false;
+          workflowState.queueTotal = testCases.length;
+          workflowState.queueCurrentIndex = 0;
+          workflowState.queueCurrentTcId = "";
+          workflowState.queueCurrentTcTitle = "";
+          workflowState.queueStartedAt = nowIso();
+          workflowState.queueResults = [];
           render();
           const results = [];
           try {
-            for (const tc of testCases) {
+            for (const [index, tc] of testCases.entries()) {
               if (workflowState.queueCancelRequested) {
                 results.push({ tc, status: "cancelled" });
+                workflowState.queueResults = results.slice();
+                renderWorkspaceWorkflowPanel();
                 break;
               }
+              workflowState.queueCurrentIndex = index + 1;
+              workflowState.queueCurrentTcId = tc.id;
+              workflowState.queueCurrentTcTitle = tc.title;
+              renderWorkspaceWorkflowPanel();
               try {
                 await startXrayWorkflow([tc], "single", { awaitCompletion: true, suppressFinalToast: true });
                 const runState = workflowState.workflowRunsByTcId.get(tc.id);
@@ -3468,10 +3581,13 @@
                 markTcWorkflowFailed(tc, error.message);
                 results.push({ tc, status: "failed" });
               }
+              workflowState.queueResults = results.slice();
+              renderWorkspaceWorkflowPanel();
             }
           } finally {
             workflowState.queueActive = false;
             workflowState.queueCancelRequested = false;
+            workflowState.queueResults = results.slice();
             render();
           }
 
@@ -3655,6 +3771,7 @@
           } else {
             updatedTcIds.forEach(renderTcWorkflowPanel);
           }
+          renderWorkspaceWorkflowPanel();
           if (!options.suppressFinalToast) {
             if (run.status === "success") toast("Xray workflow completed.");
             if (run.status === "partial") toast("Xray workflow finished with failures.");
@@ -3755,6 +3872,7 @@
             failedTcIds.push(tcId);
           });
           failedTcIds.forEach(renderTcWorkflowPanel);
+          renderWorkspaceWorkflowPanel();
         }
 
         function markTcWorkflowFailed(tc, message) {
@@ -3787,6 +3905,7 @@
             logsExpanded: false,
           });
           renderTcWorkflowPanel(tc.id);
+          renderWorkspaceWorkflowPanel();
         }
 
         function filterWorkflowLogsForTc(logs, testcaseName) {
@@ -3886,6 +4005,133 @@
               : `<div class="workflow-log-entry"><span class="workflow-log-time">--:--:--</span> Waiting for Playwright updates.</div>`
           }</div>
         </div>`;
+        }
+
+        function renderWorkspaceWorkflowPanel() {
+          if (!els.workspaceWorkflowPanel) return;
+          const visible = Boolean(
+            workflowState.queueActive ||
+              workflowState.queueStartedAt ||
+              workflowState.queueResults.length,
+          );
+          els.workspaceWorkflowPanel.hidden = !visible;
+          if (!visible) {
+            els.workspaceWorkflowPanel.innerHTML = "";
+            return;
+          }
+
+          els.workspaceWorkflowPanel.innerHTML = workspaceWorkflowPanelHtml();
+        }
+
+        function workspaceWorkflowPanelHtml() {
+          const status = workspaceWorkflowStatus();
+          const progress = workspaceWorkflowProgressText();
+          const latestMessage = latestWorkspaceWorkflowMessage();
+          const logs = workspaceWorkflowLogs().slice(0, 12);
+          const logHtml = logs.length
+            ? logs.map(renderWorkspaceWorkflowLogEntry).join("")
+            : `<div class="workflow-log-entry"><span class="workflow-log-time">--:--:--</span> Waiting for Playwright updates.</div>`;
+
+          return `<section aria-label="All evidence workflow progress">
+          <div class="workspace-workflow-head">
+            <div>
+              <h3 class="workspace-workflow-title">All Evidence Workflow</h3>
+              <div class="workspace-workflow-meta">${escapeHtml(progress)}</div>
+            </div>
+            <div class="workspace-workflow-status">${escapeHtml(status)}</div>
+          </div>
+          <div class="workspace-workflow-latest"><strong>Latest:</strong> ${escapeHtml(latestMessage)}</div>
+          <div class="workspace-workflow-logs">${logHtml}</div>
+        </section>`;
+        }
+
+        function workspaceWorkflowStatus() {
+          if (workflowState.queueCancelRequested) return "cancelled";
+          if (workflowState.queueActive) {
+            const run = workflowState.workflowRunsByTcId.get(
+              workflowState.queueCurrentTcId,
+            )?.run;
+            return run?.status === "queued" ? "queued" : "running";
+          }
+          const results = workflowState.queueResults || [];
+          if (results.some((item) => item.status === "cancelled")) return "cancelled";
+          return "completed";
+        }
+
+        function workspaceWorkflowProgressText() {
+          const total = workflowState.queueTotal || workflowState.queueResults.length || 0;
+          if (workflowState.queueCurrentIndex && total) {
+            return `Uploading ${workflowState.queueCurrentIndex} of ${total}: ${workflowState.queueCurrentTcTitle || "Evidence testcase"}`;
+          }
+          if (total) return `Queued 0 of ${total}.`;
+          return "Workflow queue is ready.";
+        }
+
+        function latestWorkspaceWorkflowMessage() {
+          const currentRun = workflowState.workflowRunsByTcId.get(
+            workflowState.queueCurrentTcId,
+          )?.run;
+          const currentLogs = Array.isArray(currentRun?.logs) ? currentRun.logs : [];
+          const currentLog = currentLogs[currentLogs.length - 1];
+          if (currentLog?.message) return currentLog.message;
+          if (currentRun?.message) return currentRun.message;
+
+          const logs = workspaceWorkflowLogs();
+          if (logs[0]?.message) return logs[0].message;
+          return "Waiting for Playwright updates.";
+        }
+
+        function workspaceWorkflowLogs() {
+          const byTimeDesc = (left, right) => {
+            const leftTime = new Date(left.time).getTime() || 0;
+            const rightTime = new Date(right.time).getTime() || 0;
+            return rightTime - leftTime;
+          };
+          const logs = [];
+          const seen = new Set();
+          const addRunLogs = (runState) => {
+            const runLogs = Array.isArray(runState?.run?.logs)
+              ? runState.run.logs
+              : [];
+            runLogs.forEach((log) => {
+              const enriched = {
+                ...log,
+                testcaseName: log.testcaseName || runState.testcaseName || "",
+              };
+              const key = [
+                enriched.time || "",
+                enriched.level || "",
+                enriched.testcaseName || "",
+                enriched.message || "",
+              ].join("|");
+              if (seen.has(key)) return;
+              seen.add(key);
+              logs.push(enriched);
+            });
+          };
+
+          addRunLogs(
+            workflowState.workflowRunsByTcId.get(workflowState.queueCurrentTcId),
+          );
+          workflowState.workflowRunsByTcId.forEach((runState, tcId) => {
+            if (tcId === workflowState.queueCurrentTcId) return;
+            addRunLogs(runState);
+          });
+
+          return logs.sort(byTimeDesc);
+        }
+
+        function renderWorkspaceWorkflowLogEntry(log) {
+          const time = formatLogTime(log.time);
+          const level = ["info", "warn", "error"].includes(log.level)
+            ? log.level
+            : "info";
+          return `<div class="workspace-workflow-log ${level}">
+            <span class="workflow-log-time">${time}</span>
+            <span class="workspace-workflow-log-level">${escapeHtml(level)}</span>
+            <strong>${escapeHtml(log.testcaseName || "Workflow")}</strong>
+            <span>${escapeHtml(log.message || "")}</span>
+          </div>`;
         }
 
         function renderWorkflowPanels() {

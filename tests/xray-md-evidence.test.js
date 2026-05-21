@@ -791,6 +791,179 @@ test("workbench Cancel Workflow stops the queue before starting the next testcas
   }
 });
 
+test("workbench workflow panel shows all-evidence queue progress and logs", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let cancelCount = 0;
+  let cancelled = false;
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "First evidence" }),
+        testCaseFixture({ id: "TC-002", title: "Second evidence" }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        await route.fulfill({
+          json: { runId: "run-workbench", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      if (url.pathname === "/workflow/run-workbench/cancel") {
+        cancelCount += 1;
+        cancelled = true;
+        await route.fulfill({
+          json: {
+            runId: "run-workbench",
+            status: "cancelled",
+            message: "Workflow cancelled.",
+            payloadSummary: { itemCount: 1, browserMode: "headless" },
+            logs: [
+              {
+                time: "2026-05-19T00:03:00.000Z",
+                level: "warn",
+                testcaseName: "First evidence",
+                message: "Workflow cancelled.",
+              },
+            ],
+            results: [],
+          },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-workbench",
+          status: cancelled ? "cancelled" : "running",
+          message: cancelled ? "Workflow cancelled." : "Uploading evidence in Playwright.",
+          payloadSummary: { itemCount: 1, browserMode: "headless" },
+          logs: [
+            {
+              time: "2026-05-19T00:02:00.000Z",
+              level: "info",
+              testcaseName: "First evidence",
+              message: "Opened Playwright page.",
+            },
+          ],
+          results: [],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+
+    const panel = page.locator("#workspaceWorkflowPanel");
+    await panel.waitFor();
+    await assert.doesNotReject(
+      panel.getByText("Uploading 1 of 2: First evidence").waitFor(),
+    );
+    await assert.doesNotReject(
+      panel
+        .locator(".workspace-workflow-latest", {
+          hasText: "Opened Playwright page.",
+        })
+        .waitFor(),
+    );
+    await assert.doesNotReject(panel.getByText("info").waitFor());
+    await assert.doesNotReject(
+      panel
+        .locator(".workspace-workflow-log", { hasText: "First evidence" })
+        .waitFor(),
+    );
+
+    await page.locator("#cancelWorkspaceWorkflowBtn").click();
+    await page.locator(".toast", { hasText: "Workflow queue cancelled" }).waitFor();
+    await panel.getByText("cancelled").waitFor();
+
+    assert.equal(cancelCount, 1);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("workbench workflow skips testcases already uploaded in Xray", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let startCount = 0;
+  let requestItems = [];
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Already uploaded evidence",
+          xrayUploaded: true,
+        }),
+        testCaseFixture({
+          id: "TC-002",
+          title: "Pending evidence",
+          xrayUploaded: false,
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        startCount += 1;
+        const body = JSON.parse(route.request().postData() || "{}");
+        requestItems = body.items || [];
+        await route.fulfill({
+          json: { runId: "run-skip-uploaded", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-skip-uploaded",
+          status: "success",
+          message: "Workflow finished.",
+          payloadSummary: { itemCount: 1, browserMode: "headless" },
+          logs: [],
+          results: [
+            {
+              testcaseName: "Pending evidence",
+              status: "success",
+            },
+          ],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+    await page.locator(".toast", { hasText: "Workflow queue completed" }).waitFor();
+
+    assert.equal(startCount, 1);
+    assert.deepEqual(
+      requestItems.map((item) => item.testcaseName),
+      ["Pending evidence"],
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
 test("actual result and screenshot notes render markdown previews safely", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
