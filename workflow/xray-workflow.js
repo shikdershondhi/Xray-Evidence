@@ -250,9 +250,13 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
   }
 }
 
-async function openTestExecution(page, summary) {
+async function openTestExecution(page, summary, options = {}) {
   await page.waitForLoadState("domcontentloaded");
   const xray = await resolveXrayScope(page);
+  const transitionTimeoutMs = Math.max(
+    100,
+    Number(options.transitionTimeoutMs) || 8000,
+  );
   logDebug("opening test execution", {
     summary,
     pageUrl: page.url(),
@@ -260,42 +264,100 @@ async function openTestExecution(page, summary) {
   });
   await searchVisibleTable(xray, summary);
   const row = await findUniqueRowByText(xray, summary, "test execution summary");
-  await row.click();
+  logDebug("matched test execution row", {
+    summary,
+    rowText: await row.innerText().catch(() => ""),
+    actions: await collectActionableElements(row),
+  });
+
+  const tryTransition = async (strategy, click) => {
+    const beforeUrl = page.url();
+    logDebug("trying test execution open strategy", { summary, strategy, beforeUrl });
+    await click();
+    const opened = await waitForTestExecutionBoard(page, transitionTimeoutMs);
+    logDebug("test execution open strategy result", {
+      summary,
+      strategy,
+      opened,
+      beforeUrl,
+      afterUrl: page.url(),
+    });
+    return opened;
+  };
+
+  if (await tryTransition("select-row", () => row.click())) return;
 
   const rowLink = row.locator("a").filter({ hasText: summary }).first();
-  if (await rowLink.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await Promise.all([
-      page.waitForLoadState("domcontentloaded").catch(() => {}),
-      rowLink.click(),
-    ]);
-    await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+  if (
+    (await rowLink.isVisible({ timeout: 1000 }).catch(() => false)) &&
+    (await tryTransition("summary-link", () => rowLink.click()))
+  ) {
+    return;
+  }
+
+  const executionIssueLink = row
+    .locator('a[href*="ac.testExecutionId="], a[href*="testExecutionId="]')
+    .first();
+  if (
+    (await executionIssueLink.isVisible({ timeout: 1000 }).catch(() => false)) &&
+    (await tryTransition("execution-issue-link", () => executionIssueLink.click()))
+  ) {
+    return;
+  }
+
+  const explicitRowAction = row
+    .locator(
+      'button[aria-label*="open" i], button[title*="open" i], [role="button"][aria-label*="open" i], [role="button"][title*="open" i]',
+    )
+    .first();
+  if (
+    (await explicitRowAction.isVisible({ timeout: 1000 }).catch(() => false)) &&
+    (await tryTransition("row-open-action", () => explicitRowAction.click()))
+  ) {
     return;
   }
 
   const selectedExecutionLink = xray.locator(TEST_EXECUTION_LINK_FALLBACK_SELECTOR).first();
-  if (await selectedExecutionLink.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await Promise.all([
-      page.waitForLoadState("domcontentloaded").catch(() => {}),
-      selectedExecutionLink.click(),
-    ]);
-    await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+  if (
+    (await selectedExecutionLink.isVisible({ timeout: 1000 }).catch(() => false)) &&
+    (await tryTransition("selected-execution-link", () => selectedExecutionLink.click()))
+  ) {
     return;
   }
 
   await row.click({ button: "right" });
   const openMenuItem = xray.getByRole("menuitem", { name: /^open$/i });
-  if (await openMenuItem.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await Promise.all([
-      page.waitForLoadState("domcontentloaded").catch(() => {}),
-      openMenuItem.click(),
-    ]);
-  } else {
-    await Promise.all([
-      page.waitForLoadState("domcontentloaded").catch(() => {}),
-      row.dblclick(),
-    ]);
+  if (
+    (await openMenuItem.isVisible({ timeout: 1000 }).catch(() => false)) &&
+    (await tryTransition("context-menu-open", () => openMenuItem.click()))
+  ) {
+    return;
   }
-  await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+
+  if (await tryTransition("double-click-row", () => row.dblclick())) {
+    return;
+  }
+
+  throw new Error(
+    `Test execution "${summary}" did not open its testcase board. Current URL: ${page.url()}`,
+  );
+}
+
+function isTestExecutionBoardUrl(url) {
+  const value = String(url || "");
+  return (
+    /(?:[#!?&]|^)page=test-execution-board(?:[&]|$)/i.test(value) &&
+    /(?:[?&#]|^)(?:testExecutionId|testExecutionKey)=[^&#]+/i.test(value)
+  );
+}
+
+async function waitForTestExecutionBoard(page, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (isTestExecutionBoardUrl(page.url())) return true;
+    await page.waitForTimeout(100);
+  }
+  return isTestExecutionBoardUrl(page.url());
 }
 
 async function openTestcaseExecution(page, testcaseName, notify = () => {}) {
