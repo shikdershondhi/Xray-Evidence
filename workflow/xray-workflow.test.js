@@ -10,6 +10,7 @@ const {
   isPointerInterceptionError,
   normalizeBrowserMode,
   normalizeWorkflowStatus,
+  openTestExecution,
   openTestcaseExecution,
   requireExecutionStatus,
   shouldSkipExecutedRow,
@@ -404,6 +405,90 @@ test("testcase search retries with slash-safe title terms", async () => {
     } else {
       process.env.XRAY_DRY_RUN_AFTER_TESTCASE_ROW = previousDryRun;
     }
+    await browser.close();
+  }
+});
+
+test("opens the selected execution through its row action and confirms the execution board", async () => {
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await page.setContent(`
+      <input placeholder="Search" />
+      <div role="row">
+        <span>NS-14369 Test Execution</span>
+        <button type="button" aria-label="Open test execution">Open</button>
+      </div>
+      <script>
+        document.querySelector("button").addEventListener("click", () => {
+          window.location.hash = "!page=test-execution-board&testExecutionId=14369";
+        });
+      </script>
+    `);
+
+    await openTestExecution(page, "NS-14369 Test Execution", {
+      transitionTimeoutMs: 1000,
+    });
+
+    assert.match(page.url(), /page=test-execution-board/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("opens an execution through its Xray execution issue link", async () => {
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await page.setContent(`
+      <input placeholder="Search" />
+      <div role="row">
+        <a href="/projects/NS?ac.testExecutionId=62850">NS-23493</a>
+        <span>NS-14369 Test Execution</span>
+      </div>
+      <script>
+        document.querySelector("a").addEventListener("click", (event) => {
+          event.preventDefault();
+          window.location.hash = "!page=test-execution-board&testExecutionId=62850";
+        });
+      </script>
+    `);
+
+    await openTestExecution(page, "NS-14369 Test Execution", {
+      transitionTimeoutMs: 300,
+    });
+
+    assert.match(page.url(), /testExecutionId=62850/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("does not continue when selecting an execution never opens its testcase board", async () => {
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await page.setContent(`
+      <input placeholder="Search" />
+      <div role="row">
+        <span>NS-14369 Test Execution</span>
+      </div>
+    `);
+
+    await assert.rejects(
+      () =>
+        openTestExecution(page, "NS-14369 Test Execution", {
+          transitionTimeoutMs: 300,
+        }),
+      /did not open its testcase board/i,
+    );
+  } finally {
     await browser.close();
   }
 });
