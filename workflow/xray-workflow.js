@@ -20,6 +20,51 @@ const {
 
 const DEBUG_LOG_PATH = path.resolve(__dirname, "workflow-debug.log");
 
+let sharedBrowser = null;
+let sharedBrowserContext = null;
+let sharedBrowserMode = null;
+
+async function closeSharedBrowser() {
+  const browser = sharedBrowser;
+  sharedBrowser = null;
+  sharedBrowserContext = null;
+  sharedBrowserMode = null;
+  if (browser) await browser.close().catch(() => {});
+}
+
+async function getSharedBrowserContext(browserMode) {
+  if (sharedBrowser && sharedBrowser.isConnected() && sharedBrowserMode === browserMode) {
+    return { browser: sharedBrowser, context: sharedBrowserContext };
+  }
+  await closeSharedBrowser();
+
+  sharedBrowser = await chromium.launch(buildChromiumLaunchOptions(browserMode));
+  sharedBrowserMode = browserMode;
+  sharedBrowser.on("disconnected", () => {
+    if (sharedBrowser && !sharedBrowser.isConnected()) {
+      sharedBrowser = null;
+      sharedBrowserContext = null;
+      sharedBrowserMode = null;
+    }
+  });
+
+  const contextOptions = hasSavedJiraSession()
+    ? { storageState: authStatePath() }
+    : {};
+  sharedBrowserContext = await sharedBrowser.newContext({
+    ...contextOptions,
+    viewport: { width: 1920, height: 1080 },
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
+  return { browser: sharedBrowser, context: sharedBrowserContext };
+}
+
+async function getSharedPage(browserMode) {
+  const { context } = await getSharedBrowserContext(browserMode);
+  const openPages = context.pages().filter((p) => !p.isClosed());
+  return openPages[0] || context.newPage();
+}
+
 function logDebug(message, data = undefined) {
   const line = {
     at: new Date().toISOString(),
@@ -130,130 +175,125 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
       status: normalizeWorkflowStatus(item.status),
     })),
   });
-  notifyLog(notify, "info", "", `Launching Playwright in ${browserMode} mode.`);
-  const browser = await chromium.launch(buildChromiumLaunchOptions(browserMode));
-  options.onBrowser?.(browser);
-  const abortBrowser = () => {
-    browser.close().catch(() => {});
-  };
-  options.signal?.addEventListener("abort", abortBrowser, { once: true });
-  throwIfWorkflowCancelled(options.signal);
-
-  const contextOptions = hasSavedJiraSession()
-    ? { storageState: authStatePath() }
-    : {};
-  const context = await browser.newContext({
-    ...contextOptions,
-    viewport: { width: 1920, height: 1080 },
-    permissions: ["clipboard-read", "clipboard-write"],
-  });
-  const page = await context.newPage();
+  notifyLog(notify, "info", "", `Reusing shared Playwright session in ${browserMode} mode.`);
+  const { context } = await getSharedBrowserContext(browserMode);
+  const page = await getSharedPage(browserMode);
   const results = [];
 
-  try {
-    throwIfWorkflowCancelled(options.signal);
-    notifyLog(notify, "info", "", "Opening Jira Xray test executions.");
+  throwIfWorkflowCancelled(options.signal);
+  notifyLog(notify, "info", "", "Opening Jira Xray test executions.");
+  await page.goto(XRAY_TEST_EXECUTIONS_URL, {
+    waitUntil: "domcontentloaded",
+    timeout: 90000,
+  });
+
+  if (isLoginUrl(page.url()) || (await hasLoginChallenge(page))) {
+    await waitForManualLogin(page, notify);
     await page.goto(XRAY_TEST_EXECUTIONS_URL, {
       waitUntil: "domcontentloaded",
       timeout: 90000,
     });
-
-    if (isLoginUrl(page.url()) || (await hasLoginChallenge(page))) {
-      await waitForManualLogin(page, notify);
-      await page.goto(XRAY_TEST_EXECUTIONS_URL, {
-        waitUntil: "domcontentloaded",
-        timeout: 90000,
-      });
-    } else {
-      await saveJiraSession(context);
-    }
-
-    await waitForXrayAppReady(page, notify);
-    throwIfWorkflowCancelled(options.signal);
-    notifyLog(notify, "info", "", `Searching execution "${payload.testExecutionSummary}".`);
-    await openTestExecution(page, payload.testExecutionSummary);
-
-    for (const item of payload.items) {
-      throwIfWorkflowCancelled(options.signal);
-      let currentStep = "Starting testcase";
-      try {
-        const localStatus = normalizeWorkflowStatus(item.status);
-        currentStep = "Opening testcase row";
-        notifyLog(notify, "info", item.testcaseName, "Opening testcase row.");
-        logDebug("processing testcase workflow item", {
-          testcaseName: item.testcaseName,
-          localStatus,
-        });
-        const openResult = await openTestcaseExecution(page, item.testcaseName, notify);
-        if (openResult.status === "skipped") {
-          notifyLog(
-            notify,
-            "warn",
-            item.testcaseName,
-            `Skipped because Xray row is already ${openResult.rowStatus}.`,
-          );
-          const skippedResult = {
-            testcaseName: item.testcaseName,
-            status: "skipped",
-            localStatus,
-            rowStatus: openResult.rowStatus,
-            message: `Skipped because Xray row is already ${openResult.rowStatus}.`,
-          };
-          results.push(skippedResult);
-          options.onResult?.(skippedResult);
-          continue;
-        }
-        currentStep = "Starting timer";
-        notifyLog(notify, "info", item.testcaseName, "Starting timer if needed.");
-        let xray = await resolveXrayScope(page);
-        await clickTimerStartIfStopped(xray);
-        notifyLog(notify, "info", item.testcaseName, "Timer step completed.");
-        currentStep = "Pasting Actual Result evidence";
-        await pasteActualResultEvidence(page, item.evidencePngDataUrl, notify, item.testcaseName);
-        currentStep = "Updating execution status";
-        notifyLog(notify, "info", item.testcaseName, `Updating Xray status to ${localStatus}.`);
-        xray = await resolveXrayScope(page);
-        await requireExecutionStatus(xray, localStatus);
-        notifyLog(notify, "info", item.testcaseName, `Xray status updated to ${localStatus}.`);
-        notifyLog(notify, "info", item.testcaseName, "Evidence upload completed.");
-        const successResult = {
-          testcaseName: item.testcaseName,
-          status: "success",
-          localStatus,
-          message: "Evidence uploaded.",
-        };
-        results.push(successResult);
-        options.onResult?.(successResult);
-      } catch (error) {
-        throwIfWorkflowCancelled(options.signal);
-        const message = `${currentStep} failed: ${error.message}`;
-        notifyLog(notify, "error", item.testcaseName, message);
-        const failedResult = {
-          testcaseName: item.testcaseName,
-          status: "failed",
-          localStatus: normalizeWorkflowStatus(item.status),
-          message,
-        };
-        results.push(failedResult);
-        options.onResult?.(failedResult);
-      }
-    }
-
-    const failed = results.filter((item) => item.status === "failed");
-    const skipped = results.filter((item) => item.status === "skipped");
-    return {
-      status: failed.length ? "partial" : "success",
-      message: failed.length
-        ? `${failed.length} testcase upload failed.`
-        : skipped.length
-          ? `Workflow completed; ${skipped.length} already executed testcase skipped.`
-          : "All evidence uploaded to Xray.",
-      results,
-    };
-  } finally {
-    options.signal?.removeEventListener("abort", abortBrowser);
-    await browser.close().catch(() => {});
+  } else {
+    await saveJiraSession(context);
   }
+
+  await waitForXrayAppReady(page, notify);
+  throwIfWorkflowCancelled(options.signal);
+  notifyLog(notify, "info", "", `Searching execution "${payload.testExecutionSummary}".`);
+  await openTestExecution(page, payload.testExecutionSummary);
+
+  for (const [index, item] of payload.items.entries()) {
+    throwIfWorkflowCancelled(options.signal);
+    let currentStep = "Starting testcase";
+    try {
+      if (index > 0) {
+        currentStep = "Returning to Jira Xray test executions";
+        notifyLog(notify, "info", item.testcaseName, "Returning to Jira Xray test executions.");
+        await page.goto(XRAY_TEST_EXECUTIONS_URL, {
+          waitUntil: "domcontentloaded",
+          timeout: 90000,
+        });
+        // XRAY_TEST_EXECUTIONS_URL differs from the testcase-detail URL only by its
+        // "#!page=..." hash, so the goto above is a same-document fragment navigation
+        // that never re-triggers the SPA's board data fetch. Force a real reload so the
+        // app actually reinitializes on the test-executions route.
+        await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
+        await waitForXrayAppReady(page, notify);
+        await openTestExecution(page, payload.testExecutionSummary);
+      }
+      const localStatus = normalizeWorkflowStatus(item.status);
+      currentStep = "Opening testcase row";
+      notifyLog(notify, "info", item.testcaseName, "Opening testcase row.");
+      logDebug("processing testcase workflow item", {
+        testcaseName: item.testcaseName,
+        localStatus,
+      });
+      const openResult = await openTestcaseExecution(page, item.testcaseName, notify);
+      if (openResult.status === "skipped") {
+        notifyLog(
+          notify,
+          "warn",
+          item.testcaseName,
+          `Skipped because Xray row is already ${openResult.rowStatus}.`,
+        );
+        const skippedResult = {
+          testcaseName: item.testcaseName,
+          status: "skipped",
+          localStatus,
+          rowStatus: openResult.rowStatus,
+          message: `Skipped because Xray row is already ${openResult.rowStatus}.`,
+        };
+        results.push(skippedResult);
+        options.onResult?.(skippedResult);
+        continue;
+      }
+      currentStep = "Starting timer";
+      notifyLog(notify, "info", item.testcaseName, "Starting timer if needed.");
+      let xray = await resolveXrayScope(page);
+      await clickTimerStartIfStopped(xray);
+      notifyLog(notify, "info", item.testcaseName, "Timer step completed.");
+      currentStep = "Pasting Actual Result evidence";
+      await pasteActualResultEvidence(page, item.evidencePngDataUrl, notify, item.testcaseName);
+      currentStep = "Updating execution status";
+      notifyLog(notify, "info", item.testcaseName, `Updating Xray status to ${localStatus}.`);
+      xray = await resolveXrayScope(page);
+      await requireExecutionStatus(xray, localStatus);
+      notifyLog(notify, "info", item.testcaseName, `Xray status updated to ${localStatus}.`);
+      notifyLog(notify, "info", item.testcaseName, "Evidence upload completed.");
+      const successResult = {
+        testcaseName: item.testcaseName,
+        status: "success",
+        localStatus,
+        message: "Evidence uploaded.",
+      };
+      results.push(successResult);
+      options.onResult?.(successResult);
+    } catch (error) {
+      throwIfWorkflowCancelled(options.signal);
+      const message = `${currentStep} failed: ${error.message}`;
+      notifyLog(notify, "error", item.testcaseName, message);
+      const failedResult = {
+        testcaseName: item.testcaseName,
+        status: "failed",
+        localStatus: normalizeWorkflowStatus(item.status),
+        message,
+      };
+      results.push(failedResult);
+      options.onResult?.(failedResult);
+    }
+  }
+
+  const failed = results.filter((item) => item.status === "failed");
+  const skipped = results.filter((item) => item.status === "skipped");
+  return {
+    status: failed.length ? "partial" : "success",
+    message: failed.length
+      ? `${failed.length} testcase upload failed.`
+      : skipped.length
+        ? `Workflow completed; ${skipped.length} already executed testcase skipped.`
+        : "All evidence uploaded to Xray.",
+    results,
+  };
 }
 
 async function openTestExecution(page, summary, options = {}) {
@@ -1351,6 +1391,7 @@ module.exports = {
   clickActualResultEditFallback,
   clickActualResultSaveButton,
   clickTimerStartIfStopped,
+  closeSharedBrowser,
   dataUrlToBuffer,
   getXrayRowExecutionStatus,
   getXrayRowExecutionStatusFromText,

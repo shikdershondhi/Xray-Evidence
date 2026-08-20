@@ -286,6 +286,138 @@ test("cancel workflow returns 404 for an unknown run", async () => {
   }
 });
 
+test("serializes two runs through a single queue instead of running them concurrently", async () => {
+  let running = 0;
+  let maxRunning = 0;
+  let resolveFirst;
+  const firstStarted = new Promise((resolve) => {
+    resolveFirst = resolve;
+  });
+  let secondInvoked = false;
+
+  const server = createServer({
+    port: 0,
+    host: "127.0.0.1",
+    workflowRunner: (payload) => {
+      running += 1;
+      maxRunning = Math.max(maxRunning, running);
+      if (payload.testExecutionSummary === "run-2") secondInvoked = true;
+      return new Promise((resolve) => {
+        if (payload.testExecutionSummary === "run-1") {
+          resolveFirst(() => {
+            running -= 1;
+            resolve({ status: "success", message: "done", results: [] });
+          });
+        } else {
+          running -= 1;
+          resolve({ status: "success", message: "done", results: [] });
+        }
+      });
+    },
+  });
+  const port = await listenOnRandomPort(server);
+  const item = {
+    testcaseName: "Upload evidence",
+    evidencePngDataUrl: "data:image/png;base64,AAAA",
+    status: "pass",
+  };
+
+  try {
+    const start1 = await postLocalJson(port, "/workflow/start", {
+      testExecutionSummary: "run-1",
+      browserMode: "headless",
+      items: [item],
+    });
+    const start2 = await postLocalJson(port, "/workflow/start", {
+      testExecutionSummary: "run-2",
+      browserMode: "headless",
+      items: [item],
+    });
+
+    const finishFirst = await firstStarted;
+
+    const run2Snapshot = JSON.parse(
+      (await getLocalPath(port, `/workflow/${encodeURIComponent(start2.json.runId)}`)).body,
+    );
+    assert.equal(run2Snapshot.status, "queued");
+    assert.equal(secondInvoked, false);
+
+    finishFirst();
+
+    for (let attempt = 0; attempt < 20 && !secondInvoked; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.equal(secondInvoked, true);
+    assert.equal(maxRunning, 1);
+
+    const run1Final = JSON.parse(
+      (await getLocalPath(port, `/workflow/${encodeURIComponent(start1.json.runId)}`)).body,
+    );
+    assert.equal(run1Final.status, "success");
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
+test("cancelling a run that is still waiting in the queue never invokes it", async () => {
+  let resolveFirst;
+  const invoked = [];
+  const server = createServer({
+    port: 0,
+    host: "127.0.0.1",
+    workflowRunner: (payload) =>
+      new Promise((resolve) => {
+        invoked.push(payload.testExecutionSummary);
+        if (payload.testExecutionSummary === "run-1") {
+          resolveFirst = () => resolve({ status: "success", message: "done", results: [] });
+        } else {
+          resolve({ status: "success", message: "done", results: [] });
+        }
+      }),
+  });
+  const port = await listenOnRandomPort(server);
+  const item = {
+    testcaseName: "Upload evidence",
+    evidencePngDataUrl: "data:image/png;base64,AAAA",
+    status: "pass",
+  };
+
+  try {
+    await postLocalJson(port, "/workflow/start", {
+      testExecutionSummary: "run-1",
+      browserMode: "headless",
+      items: [item],
+    });
+    const start2 = await postLocalJson(port, "/workflow/start", {
+      testExecutionSummary: "run-2",
+      browserMode: "headless",
+      items: [item],
+    });
+
+    for (let attempt = 0; attempt < 20 && !resolveFirst; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    const cancel2 = await postLocalJson(
+      port,
+      `/workflow/${encodeURIComponent(start2.json.runId)}/cancel`,
+    );
+    assert.equal(cancel2.statusCode, 200);
+    assert.equal(cancel2.json.status, "cancelled");
+    assert.deepEqual(invoked, ["run-1"]);
+
+    resolveFirst();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.deepEqual(invoked, ["run-1"]);
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
 test("setup terminal command runs setup, doctor, and app launch", () => {
   const launch = buildSetupLaunchCommand("C:\\repo\\Xray-Evidence");
   const commandText = [launch.command, ...launch.args].join(" ");

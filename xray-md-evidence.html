@@ -3779,6 +3779,12 @@
 
         function renderWorkflowRun(run, options = {}) {
           options.onRawRun?.(run);
+          const isBatch = Number(run.payloadSummary?.itemCount || 0) > 1;
+          const runLogs = Array.isArray(run.logs) ? run.logs : [];
+          const activeLog = [...runLogs].reverse().find((log) => log.testcaseName);
+          const activeTestcaseName = activeLog ? cleanText(activeLog.testcaseName) : "";
+          const runStillActive = !isFinalWorkflowStatus(run.status);
+
           const updatedTcIds = [];
           let uploadedChanged = false;
           workflowState.workflowRunsByTcId.forEach((runState, tcId) => {
@@ -3787,14 +3793,26 @@
               run.results,
               runState.testcaseName,
             );
-            const tcStatus = tcResults.length
-              ? tcResults.some((result) => result.status === "failed")
+            let tcStatus;
+            let tcMessage = run.message;
+            if (tcResults.length) {
+              tcStatus = tcResults.some((result) => result.status === "failed")
                 ? "failed"
-                : "success"
-              : run.status;
+                : "success";
+            } else if (
+              isBatch &&
+              runStillActive &&
+              cleanText(runState.testcaseName) !== activeTestcaseName
+            ) {
+              tcStatus = "queued";
+              tcMessage = "Queued — waiting for its turn in this workflow run.";
+            } else {
+              tcStatus = run.status;
+            }
             runState.run = {
               ...run,
               status: tcStatus,
+              message: tcMessage,
               logs: filterWorkflowLogsForTc(run.logs, runState.testcaseName),
               results: tcResults,
               payloadSummary: {
@@ -4139,10 +4157,7 @@
               ? runState.run.logs
               : [];
             runLogs.forEach((log) => {
-              const enriched = {
-                ...log,
-                testcaseName: log.testcaseName || runState.testcaseName || "",
-              };
+              const enriched = { ...log, testcaseName: log.testcaseName || "" };
               const key = [
                 enriched.time || "",
                 enriched.level || "",

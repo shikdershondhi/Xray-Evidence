@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { execFile } = require("child_process");
 const {
+  closeSharedBrowser,
   normalizeBrowserMode,
   normalizeWorkflowStatus,
   runXrayWorkflow,
@@ -18,6 +19,8 @@ const ROOT_DIR = path.resolve(__dirname, "..");
 const FINAL_RUN_STATUSES = new Set(["success", "partial", "failed", "cancelled"]);
 const runs = new Map();
 const runControls = new Map();
+const runQueue = [];
+let queueActive = false;
 
 function corsHeaders() {
   return {
@@ -170,7 +173,6 @@ function createRun(payload) {
   runs.set(runId, run);
   runControls.set(runId, {
     controller: new AbortController(),
-    browser: null,
   });
   return run;
 }
@@ -220,59 +222,78 @@ function markRunCancelled(runId, message = "Workflow cancelled.") {
   });
 }
 
-function startRun(runId, payload, state = {}) {
-  setImmediate(async () => {
-    const control = runControls.get(runId);
+async function executeRun(runId, payload, state) {
+  const control = runControls.get(runId);
+  if (control?.controller.signal.aborted) {
+    markRunCancelled(runId);
+    runControls.delete(runId);
+    return;
+  }
+  updateRun(runId, { status: "running", message: "Starting Playwright." });
+  const workflowRunner = state.workflowRunner || runXrayWorkflow;
+  try {
+    const result = await workflowRunner(
+      payload,
+      (status, message, logEntry) => {
+        if (control?.controller.signal.aborted) return;
+        if (logEntry) appendRunLog(runId, logEntry);
+        updateRun(runId, { status, message });
+      },
+      {
+        signal: control?.controller.signal,
+        onResult: (result) => {
+          if (control?.controller.signal.aborted) return;
+          appendRunResult(runId, result);
+        },
+      },
+    );
     if (control?.controller.signal.aborted) {
       markRunCancelled(runId);
-      runControls.delete(runId);
       return;
     }
-    updateRun(runId, { status: "running", message: "Starting Playwright." });
-    const workflowRunner = state.workflowRunner || runXrayWorkflow;
-    try {
-      const result = await workflowRunner(
-        payload,
-        (status, message, logEntry) => {
-          if (control?.controller.signal.aborted) return;
-          if (logEntry) appendRunLog(runId, logEntry);
-          updateRun(runId, { status, message });
-        },
-        {
-          signal: control?.controller.signal,
-          onBrowser: (browser) => {
-            if (control) control.browser = browser;
-          },
-          onResult: (result) => {
-            if (control?.controller.signal.aborted) return;
-            appendRunResult(runId, result);
-          },
-        },
-      );
-      if (control?.controller.signal.aborted) {
-        markRunCancelled(runId);
-        return;
-      }
-      updateRun(runId, { status: result.status, message: result.message });
-    } catch (error) {
-      if (isWorkflowCancelledError(error) || control?.controller.signal.aborted) {
-        markRunCancelled(runId);
-        return;
-      }
-      appendRunLog(runId, {
-        level: "error",
-        testcaseName: "",
-        message: error.message || "Workflow failed.",
-      });
-      updateRun(runId, {
-        status: "failed",
-        message: error.message || "Workflow failed.",
-        results: [],
-      });
-    } finally {
-      runControls.delete(runId);
+    updateRun(runId, { status: result.status, message: result.message });
+  } catch (error) {
+    if (isWorkflowCancelledError(error) || control?.controller.signal.aborted) {
+      markRunCancelled(runId);
+      return;
     }
-  });
+    appendRunLog(runId, {
+      level: "error",
+      testcaseName: "",
+      message: error.message || "Workflow failed.",
+    });
+    updateRun(runId, {
+      status: "failed",
+      message: error.message || "Workflow failed.",
+      results: [],
+    });
+  } finally {
+    runControls.delete(runId);
+  }
+}
+
+async function processQueue() {
+  if (queueActive) return;
+  queueActive = true;
+  try {
+    while (runQueue.length) {
+      const next = runQueue.shift();
+      await executeRun(next.runId, next.payload, next.state);
+    }
+  } finally {
+    queueActive = false;
+  }
+}
+
+function startRun(runId, payload, state = {}) {
+  runQueue.push({ runId, payload, state });
+  if (runQueue.length > 1) {
+    updateRun(runId, {
+      status: "queued",
+      message: `Waiting in queue behind ${runQueue.length - 1} run(s).`,
+    });
+  }
+  setImmediate(processQueue);
 }
 
 async function cancelRun(runId) {
@@ -280,12 +301,19 @@ async function cancelRun(runId) {
   if (!run) return null;
   if (FINAL_RUN_STATUSES.has(run.status)) return run;
 
+  const queueIndex = runQueue.findIndex((entry) => entry.runId === runId);
   const control = runControls.get(runId);
-  markRunCancelled(runId);
-  if (control) {
-    control.controller.abort();
-    await control.browser?.close().catch(() => {});
+
+  if (queueIndex !== -1) {
+    runQueue.splice(queueIndex, 1);
+    markRunCancelled(runId, "Workflow cancelled while waiting in queue.");
+    control?.controller.abort();
+    runControls.delete(runId);
+    return runs.get(runId);
   }
+
+  markRunCancelled(runId);
+  control?.controller.abort();
   return runs.get(runId);
 }
 
@@ -477,6 +505,13 @@ async function startWorkflowServer({ open = false, port = PORT, host = HOST } = 
       const url = `http://${host}:${state.port}`;
       console.log(`Xray Evidence server listening on ${url}`);
       if (open) openLocalUrl(url);
+      const shutdown = async (signal) => {
+        console.log(`Received ${signal}, closing shared browser...`);
+        await closeSharedBrowser().catch(() => {});
+        process.exit(0);
+      };
+      process.once("SIGINT", () => shutdown("SIGINT"));
+      process.once("SIGTERM", () => shutdown("SIGTERM"));
       return server;
     } catch (error) {
       if (error.code !== "EADDRINUSE") {
