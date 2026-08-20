@@ -17,6 +17,7 @@ const SERVICE_NAME = "Xray workflow service";
 const HTML_PATH = path.resolve(__dirname, "../xray-md-evidence.html");
 const ROOT_DIR = path.resolve(__dirname, "..");
 const FINAL_RUN_STATUSES = new Set(["success", "partial", "failed", "cancelled"]);
+const RUN_WATCHDOG_MS = Number(process.env.XRAY_RUN_WATCHDOG_MS || 10 * 60 * 1000);
 const runs = new Map();
 const runControls = new Map();
 const runQueue = [];
@@ -231,8 +232,11 @@ async function executeRun(runId, payload, state) {
   }
   updateRun(runId, { status: "running", message: "Starting Playwright." });
   const workflowRunner = state.workflowRunner || runXrayWorkflow;
+  const watchdogMs = state.watchdogMs || RUN_WATCHDOG_MS;
+  let watchdogTimer = null;
+  let watchdogFired = false;
   try {
-    const result = await workflowRunner(
+    const runnerPromise = workflowRunner(
       payload,
       (status, message, logEntry) => {
         if (control?.controller.signal.aborted) return;
@@ -247,12 +251,31 @@ async function executeRun(runId, payload, state) {
         },
       },
     );
+    runnerPromise.catch(() => {});
+    const watchdogPromise = new Promise((_, reject) => {
+      watchdogTimer = setTimeout(() => {
+        watchdogFired = true;
+        control?.controller.abort();
+        reject(new Error("Workflow timed out — the browser stopped responding."));
+      }, watchdogMs);
+    });
+    const result = await Promise.race([runnerPromise, watchdogPromise]);
     if (control?.controller.signal.aborted) {
       markRunCancelled(runId);
       return;
     }
     updateRun(runId, { status: result.status, message: result.message });
   } catch (error) {
+    if (watchdogFired) {
+      await closeSharedBrowser().catch(() => {});
+      appendRunLog(runId, {
+        level: "error",
+        testcaseName: "",
+        message: error.message,
+      });
+      updateRun(runId, { status: "failed", message: error.message, results: [] });
+      return;
+    }
     if (isWorkflowCancelledError(error) || control?.controller.signal.aborted) {
       markRunCancelled(runId);
       return;
@@ -268,6 +291,7 @@ async function executeRun(runId, payload, state) {
       results: [],
     });
   } finally {
+    if (watchdogTimer) clearTimeout(watchdogTimer);
     runControls.delete(runId);
   }
 }
