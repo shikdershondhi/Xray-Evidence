@@ -3042,6 +3042,7 @@
               <input type="checkbox" data-action="xray-uploaded" data-tc="${tc.id}" ${tc.xrayUploaded ? "checked" : ""}>
               Uploaded in Xray
             </label>
+            <button class="small success" data-action="download-evidence-jpg" data-tc="${tc.id}" type="button">Download</button>
             ${status === "fail" ? `<button class="small warning" data-action="report-bug" data-tc="${tc.id}" type="button">Report Bug</button>` : ""}
             <button class="small success status-save" data-action="save-to-gist" data-tc="${tc.id}" type="button">Save</button>
           </div>
@@ -3333,6 +3334,7 @@
           if (action === "delete-image") deleteImage(tcId, index).catch(showError);
           if (action === "clear-tc") clearTcImages(tcId).catch(showError);
           if (action === "download-tc") downloadTcJson(tcId);
+          if (action === "download-evidence-jpg") downloadTcEvidenceJpg(tcId).catch(showError);
           if (action === "report-bug") openBugReportDialog(tcId);
           if (action === "save-to-gist")
             pushToGist({ confirmBeforePush: false }).catch(showError);
@@ -3378,6 +3380,23 @@
           const dataUrl = await composeEvidenceImage(tc);
           await copyDataUrlToClipboard(dataUrl);
           toast(`Copied ${tc.id} evidence as one image`);
+        }
+
+        async function downloadTcEvidenceJpg(tcId) {
+          const workspace = activeWorkspace();
+          const tc = getTc(tcId);
+          if (!workspace || !tc || !tc.images.length) {
+            toast("No evidence to download for this TC.");
+            return;
+          }
+
+          const dataUrl = await composeEvidenceImage(tc, {
+            mimeType: "image/jpeg",
+            quality: 0.92,
+          });
+          const blob = await (await fetch(dataUrl)).blob();
+          downloadBlob(`${safeFileName(workspace.name)}-${tc.id}.jpg`, blob);
+          toast(`Downloaded ${tc.id} evidence as JPG`);
         }
 
         async function copyTcEvidenceSeparately(tcId) {
@@ -4475,7 +4494,7 @@
           });
         }
 
-        async function composeEvidenceImage(tc) {
+        async function composeEvidenceImage(tc, { mimeType = "image/png", quality } = {}) {
           const images = await Promise.all(
             tc.images.map(async (evidence, index) => ({
               evidence,
@@ -4558,7 +4577,7 @@
             y += item.height + gap;
           });
 
-          return canvas.toDataURL("image/png");
+          return canvas.toDataURL(mimeType, quality);
         }
 
         async function composeSingleEvidenceImage(evidence, index) {
@@ -5759,6 +5778,15 @@
 
         function downloadText(fileName, text, type) {
           const blob = new Blob([text], { type });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = fileName;
+          link.click();
+          URL.revokeObjectURL(url);
+        }
+
+        function downloadBlob(fileName, blob) {
           const url = URL.createObjectURL(blob);
           const link = document.createElement("a");
           link.href = url;

@@ -453,6 +453,22 @@
         font-weight: 900;
       }
 
+      .badge-new {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 7px;
+        margin-left: 8px;
+        border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--accent) 14%, transparent);
+        color: var(--accent-strong);
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        vertical-align: middle;
+      }
+
       .case-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -937,6 +953,15 @@
               <p>
                 Setup and doctor commands check Node.js, dependencies, Playwright
                 Chromium, launch scripts, and workflow readiness.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">DL</div>
+              <h3>Download evidence as JPG<span class="badge-new">New</span></h3>
+              <p>
+                One click on a testcase card downloads its combined evidence image
+                as a JPG file, ready to attach in a Jira comment when clipboard
+                paste isn't convenient.
               </p>
             </article>
           </div>
