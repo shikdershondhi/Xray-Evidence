@@ -188,6 +188,13 @@ function appendRunLog(runId, entry) {
   run.updatedAt = logEntry.time;
 }
 
+function appendRunResult(runId, result) {
+  const run = runs.get(runId);
+  if (!run) return;
+  run.results.push(result);
+  run.updatedAt = new Date().toISOString();
+}
+
 function updateRun(runId, patch) {
   const run = runs.get(runId);
   if (!run) return;
@@ -236,13 +243,17 @@ function startRun(runId, payload, state = {}) {
           onBrowser: (browser) => {
             if (control) control.browser = browser;
           },
+          onResult: (result) => {
+            if (control?.controller.signal.aborted) return;
+            appendRunResult(runId, result);
+          },
         },
       );
       if (control?.controller.signal.aborted) {
         markRunCancelled(runId);
         return;
       }
-      updateRun(runId, result);
+      updateRun(runId, { status: result.status, message: result.message });
     } catch (error) {
       if (isWorkflowCancelledError(error) || control?.controller.signal.aborted) {
         markRunCancelled(runId);

@@ -192,13 +192,15 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
             item.testcaseName,
             `Skipped because Xray row is already ${openResult.rowStatus}.`,
           );
-          results.push({
+          const skippedResult = {
             testcaseName: item.testcaseName,
             status: "skipped",
             localStatus,
             rowStatus: openResult.rowStatus,
             message: `Skipped because Xray row is already ${openResult.rowStatus}.`,
-          });
+          };
+          results.push(skippedResult);
+          options.onResult?.(skippedResult);
           continue;
         }
         currentStep = "Starting timer";
@@ -214,22 +216,26 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
         await requireExecutionStatus(xray, localStatus);
         notifyLog(notify, "info", item.testcaseName, `Xray status updated to ${localStatus}.`);
         notifyLog(notify, "info", item.testcaseName, "Evidence upload completed.");
-        results.push({
+        const successResult = {
           testcaseName: item.testcaseName,
           status: "success",
           localStatus,
           message: "Evidence uploaded.",
-        });
+        };
+        results.push(successResult);
+        options.onResult?.(successResult);
       } catch (error) {
         throwIfWorkflowCancelled(options.signal);
         const message = `${currentStep} failed: ${error.message}`;
         notifyLog(notify, "error", item.testcaseName, message);
-        results.push({
+        const failedResult = {
           testcaseName: item.testcaseName,
           status: "failed",
           localStatus: normalizeWorkflowStatus(item.status),
           message,
-        });
+        };
+        results.push(failedResult);
+        options.onResult?.(failedResult);
       }
     }
 

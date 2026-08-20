@@ -3561,7 +3561,7 @@
           }
           const unsetCount = items.filter((tc) => normalizeStatus(tc.status) === "unset").length;
           const confirmed = confirm(
-            `Start workflow upload for ${items.length} test case${items.length === 1 ? "" : "s"}?\n\n${unsetCount} unset status${unsetCount === 1 ? "" : "es"} will be saved and sent as Pass.\n\nUploads run one test case at a time and continue after failures.`,
+            `Start workflow upload for ${items.length} test case${items.length === 1 ? "" : "s"}?\n\n${unsetCount} unset status${unsetCount === 1 ? "" : "es"} will be saved and sent as Pass.\n\nA single Playwright session uploads all test cases one at a time and continues after failures.`,
           );
           if (!confirmed) return;
           await startXrayWorkflowQueue(items);
@@ -3578,31 +3578,46 @@
           workflowState.queueStartedAt = nowIso();
           workflowState.queueResults = [];
           render();
-          const results = [];
-          try {
-            for (const [index, tc] of testCases.entries()) {
-              if (workflowState.queueCancelRequested) {
-                results.push({ tc, status: "cancelled" });
-                workflowState.queueResults = results.slice();
-                renderWorkspaceWorkflowPanel();
-                break;
+
+          const onRawRun = (run) => {
+            const runResults = Array.isArray(run.results) ? run.results : [];
+            workflowState.queueCurrentIndex = Math.min(
+              runResults.length + 1,
+              testCases.length,
+            );
+            const runLogs = Array.isArray(run.logs) ? run.logs : [];
+            const latestNamedLog = [...runLogs]
+              .reverse()
+              .find((log) => log.testcaseName);
+            if (latestNamedLog) {
+              const activeTc = testCases.find(
+                (tc) => cleanText(tc.title) === cleanText(latestNamedLog.testcaseName),
+              );
+              if (activeTc) {
+                workflowState.queueCurrentTcId = activeTc.id;
+                workflowState.queueCurrentTcTitle = activeTc.title;
               }
-              workflowState.queueCurrentIndex = index + 1;
-              workflowState.queueCurrentTcId = tc.id;
-              workflowState.queueCurrentTcTitle = tc.title;
-              renderWorkspaceWorkflowPanel();
-              try {
-                await startXrayWorkflow([tc], "single", { awaitCompletion: true, suppressFinalToast: true });
-                const runState = workflowState.workflowRunsByTcId.get(tc.id);
-                const status = runState?.run?.status || "failed";
-                results.push({ tc, status });
-              } catch (error) {
-                markTcWorkflowFailed(tc, error.message);
-                results.push({ tc, status: "failed" });
-              }
-              workflowState.queueResults = results.slice();
-              renderWorkspaceWorkflowPanel();
             }
+            renderWorkspaceWorkflowPanel();
+          };
+
+          let results = [];
+          try {
+            await startXrayWorkflow(testCases, "batch", {
+              awaitCompletion: true,
+              suppressFinalToast: true,
+              onRawRun,
+            });
+            results = testCases.map((tc) => {
+              const runState = workflowState.workflowRunsByTcId.get(tc.id);
+              const status = workflowState.queueCancelRequested
+                ? "cancelled"
+                : runState?.run?.status || "failed";
+              return { tc, status };
+            });
+          } catch (error) {
+            testCases.forEach((tc) => markTcWorkflowFailed(tc, error.message));
+            results = testCases.map((tc) => ({ tc, status: "failed" }));
           } finally {
             workflowState.queueActive = false;
             workflowState.queueCancelRequested = false;
@@ -3763,17 +3778,25 @@
         }
 
         function renderWorkflowRun(run, options = {}) {
+          options.onRawRun?.(run);
           const updatedTcIds = [];
           let uploadedChanged = false;
           workflowState.workflowRunsByTcId.forEach((runState, tcId) => {
             if (runState.run?.runId !== run.runId) return;
+            const tcResults = filterWorkflowResultsForTc(
+              run.results,
+              runState.testcaseName,
+            );
+            const tcStatus = tcResults.length
+              ? tcResults.some((result) => result.status === "failed")
+                ? "failed"
+                : "success"
+              : run.status;
             runState.run = {
               ...run,
+              status: tcStatus,
               logs: filterWorkflowLogsForTc(run.logs, runState.testcaseName),
-              results: filterWorkflowResultsForTc(
-                run.results,
-                runState.testcaseName,
-              ),
+              results: tcResults,
               payloadSummary: {
                 ...(run.payloadSummary || {}),
                 itemCount: 1,
@@ -3816,9 +3839,12 @@
 
         async function cancelWorkspaceWorkflow() {
           workflowState.queueCancelRequested = true;
+          const seenRunIds = new Set();
           const cancelPromises = [];
           workflowState.workflowRunsByTcId.forEach((runState, tcId) => {
-            if (isActiveWorkflowRun(runState?.run)) {
+            const runId = runState?.run?.runId;
+            if (isActiveWorkflowRun(runState?.run) && runId && !seenRunIds.has(runId)) {
+              seenRunIds.add(runId);
               cancelPromises.push(cancelXrayWorkflowForTc(tcId));
             }
           });
