@@ -32,8 +32,26 @@ async function closeSharedBrowser() {
   if (browser) await browser.close().catch(() => {});
 }
 
+async function isSharedBrowserResponsive() {
+  if (!sharedBrowser || !sharedBrowser.isConnected() || !sharedBrowserContext) return false;
+  try {
+    const probePage =
+      sharedBrowserContext.pages().find((p) => !p.isClosed()) ||
+      (await sharedBrowserContext.newPage());
+    await Promise.race([
+      probePage.evaluate(() => true),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("shared browser responsiveness probe timed out")), 4000)
+      ),
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function getSharedBrowserContext(browserMode) {
-  if (sharedBrowser && sharedBrowser.isConnected() && sharedBrowserMode === browserMode) {
+  if (sharedBrowserMode === browserMode && (await isSharedBrowserResponsive())) {
     return { browser: sharedBrowser, context: sharedBrowserContext };
   }
   await closeSharedBrowser();
@@ -61,8 +79,15 @@ async function getSharedBrowserContext(browserMode) {
 
 async function getSharedPage(browserMode) {
   const { context } = await getSharedBrowserContext(browserMode);
-  const openPages = context.pages().filter((p) => !p.isClosed());
-  return openPages[0] || context.newPage();
+  await Promise.all(
+    context
+      .pages()
+      .filter((p) => !p.isClosed())
+      .map((p) => p.close().catch(() => {}))
+  );
+  const page = await context.newPage();
+  page.on("dialog", (dialog) => dialog.dismiss().catch(() => {}));
+  return page;
 }
 
 function logDebug(message, data = undefined) {

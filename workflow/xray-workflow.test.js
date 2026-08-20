@@ -286,6 +286,71 @@ test("cancel workflow returns 404 for an unknown run", async () => {
   }
 });
 
+test("a run that never settles is failed by the watchdog and does not block the next run", async () => {
+  let abortSeen = false;
+  let secondInvoked = false;
+  const server = createServer({
+    port: 0,
+    host: "127.0.0.1",
+    watchdogMs: 100,
+    workflowRunner: (payload, _notify, options) => {
+      if (payload.testExecutionSummary === "run-1") {
+        options.signal.addEventListener("abort", () => {
+          abortSeen = true;
+        });
+        return new Promise(() => {});
+      }
+      secondInvoked = true;
+      return Promise.resolve({ status: "success", message: "done", results: [] });
+    },
+  });
+  const port = await listenOnRandomPort(server);
+  const item = {
+    testcaseName: "Upload evidence",
+    evidencePngDataUrl: "data:image/png;base64,AAAA",
+    status: "pass",
+  };
+
+  try {
+    const start1 = await postLocalJson(port, "/workflow/start", {
+      testExecutionSummary: "run-1",
+      browserMode: "headless",
+      items: [item],
+    });
+
+    let run1Snapshot;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      run1Snapshot = JSON.parse(
+        (await getLocalPath(port, `/workflow/${encodeURIComponent(start1.json.runId)}`)).body,
+      );
+      if (run1Snapshot.status === "failed") break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.equal(run1Snapshot.status, "failed");
+    assert.match(run1Snapshot.message, /timed out/i);
+    assert.equal(abortSeen, true);
+
+    const start2 = await postLocalJson(port, "/workflow/start", {
+      testExecutionSummary: "run-2",
+      browserMode: "headless",
+      items: [item],
+    });
+    let run2Snapshot;
+    for (let attempt = 0; attempt < 40 && !secondInvoked; attempt += 1) {
+      run2Snapshot = JSON.parse(
+        (await getLocalPath(port, `/workflow/${encodeURIComponent(start2.json.runId)}`)).body,
+      );
+      if (run2Snapshot.status === "success") break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.equal(secondInvoked, true);
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
 test("serializes two runs through a single queue instead of running them concurrently", async () => {
   let running = 0;
   let maxRunning = 0;
