@@ -1350,6 +1350,27 @@ test("copy seperatly does not change Copy TC Evidence merged-image behavior", as
   }
 });
 
+test("download button saves TC evidence as a JPG file", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ acceptDownloads: true });
+
+  try {
+    await seedWorkspace(page, workspaceWithUploadedCases([testCaseFixture()]));
+    await page.goto(htmlUrl);
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page
+        .locator('button[data-action="download-evidence-jpg"][data-tc="TC-001"]')
+        .click(),
+    ]);
+
+    assert.equal(download.suggestedFilename(), "evidence-workspace-TC-001.jpg");
+  } finally {
+    await browser.close();
+  }
+});
+
 test("copy seperatly shows fallback guidance when multi-image clipboard write fails", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
