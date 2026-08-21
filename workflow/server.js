@@ -241,11 +241,21 @@ async function executeRun(runId, payload, state) {
   const watchdogMs = state.watchdogMs || RUN_WATCHDOG_MS;
   let watchdogTimer = null;
   let watchdogFired = false;
+  let watchdogReject = null;
+  const armWatchdog = () => {
+    if (watchdogTimer) clearTimeout(watchdogTimer);
+    watchdogTimer = setTimeout(() => {
+      watchdogFired = true;
+      control?.controller.abort();
+      watchdogReject?.(new Error("Workflow timed out — the browser stopped responding."));
+    }, watchdogMs);
+  };
   try {
     const runnerPromise = workflowRunner(
       payload,
       (status, message, logEntry) => {
         if (control?.controller.signal.aborted) return;
+        armWatchdog();
         if (logEntry) appendRunLog(runId, logEntry);
         updateRun(runId, { status, message });
       },
@@ -253,17 +263,15 @@ async function executeRun(runId, payload, state) {
         signal: control?.controller.signal,
         onResult: (result) => {
           if (control?.controller.signal.aborted) return;
+          armWatchdog();
           appendRunResult(runId, result);
         },
       },
     );
     runnerPromise.catch(() => {});
     const watchdogPromise = new Promise((_, reject) => {
-      watchdogTimer = setTimeout(() => {
-        watchdogFired = true;
-        control?.controller.abort();
-        reject(new Error("Workflow timed out — the browser stopped responding."));
-      }, watchdogMs);
+      watchdogReject = reject;
+      armWatchdog();
     });
     const result = await Promise.race([runnerPromise, watchdogPromise]);
     if (control?.controller.signal.aborted) {
