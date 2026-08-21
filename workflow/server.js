@@ -12,7 +12,7 @@ const {
 const PORT = Number(process.env.XRAY_WORKFLOW_PORT || 39291);
 const HOST = "127.0.0.1";
 const MAX_PORT_ATTEMPTS = Number(process.env.XRAY_PORT_ATTEMPTS || 20);
-const MAX_BODY_BYTES = 80 * 1024 * 1024;
+const MAX_BODY_BYTES = 500 * 1024 * 1024;
 const SERVICE_NAME = "Xray workflow service";
 const HTML_PATH = path.resolve(__dirname, "../xray-md-evidence.html");
 const ROOT_DIR = path.resolve(__dirname, "..");
@@ -100,21 +100,27 @@ function checkExistingWorkflowService(port = PORT, host = HOST) {
   });
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, res) {
   return new Promise((resolve, reject) => {
     let size = 0;
     let body = "";
+    let tooLarge = false;
     req.setEncoding("utf8");
     req.on("data", (chunk) => {
+      if (tooLarge) return;
       size += Buffer.byteLength(chunk);
       if (size > MAX_BODY_BYTES) {
-        reject(new Error("Request body is too large."));
-        req.destroy();
+        tooLarge = true;
+        const error = new Error("Request body is too large.");
+        error.responded = true;
+        sendJson(res, 413, { error: error.message });
+        reject(error);
         return;
       }
       body += chunk;
     });
     req.on("end", () => {
+      if (tooLarge) return;
       try {
         resolve(body ? JSON.parse(body) : {});
       } catch {
@@ -235,11 +241,21 @@ async function executeRun(runId, payload, state) {
   const watchdogMs = state.watchdogMs || RUN_WATCHDOG_MS;
   let watchdogTimer = null;
   let watchdogFired = false;
+  let watchdogReject = null;
+  const armWatchdog = () => {
+    if (watchdogTimer) clearTimeout(watchdogTimer);
+    watchdogTimer = setTimeout(() => {
+      watchdogFired = true;
+      control?.controller.abort();
+      watchdogReject?.(new Error("Workflow timed out — the browser stopped responding."));
+    }, watchdogMs);
+  };
   try {
     const runnerPromise = workflowRunner(
       payload,
       (status, message, logEntry) => {
         if (control?.controller.signal.aborted) return;
+        armWatchdog();
         if (logEntry) appendRunLog(runId, logEntry);
         updateRun(runId, { status, message });
       },
@@ -247,17 +263,15 @@ async function executeRun(runId, payload, state) {
         signal: control?.controller.signal,
         onResult: (result) => {
           if (control?.controller.signal.aborted) return;
+          armWatchdog();
           appendRunResult(runId, result);
         },
       },
     );
     runnerPromise.catch(() => {});
     const watchdogPromise = new Promise((_, reject) => {
-      watchdogTimer = setTimeout(() => {
-        watchdogFired = true;
-        control?.controller.abort();
-        reject(new Error("Workflow timed out — the browser stopped responding."));
-      }, watchdogMs);
+      watchdogReject = reject;
+      armWatchdog();
     });
     const result = await Promise.race([runnerPromise, watchdogPromise]);
     if (control?.controller.signal.aborted) {
@@ -386,7 +400,7 @@ async function handleRequest(req, res, state = { port: PORT, host: HOST }) {
 
   if (req.method === "POST" && url.pathname === "/workflow/start") {
     try {
-      const payload = validateWorkflowPayload(await readJsonBody(req));
+      const payload = validateWorkflowPayload(await readJsonBody(req, res));
       const run = createRun(payload);
       startRun(run.runId, payload, state);
       sendJson(res, 202, {
@@ -395,7 +409,9 @@ async function handleRequest(req, res, state = { port: PORT, host: HOST }) {
         message: run.message,
       });
     } catch (error) {
-      sendJson(res, 400, { error: error.message });
+      if (!error.responded) {
+        sendJson(res, 400, { error: error.message });
+      }
     }
     return;
   }
