@@ -1437,6 +1437,49 @@
           padding: 64px 12px 18px;
         }
       }
+
+      .pdf-export-view {
+        position: fixed;
+        top: 0;
+        left: -10000px;
+        width: 800px;
+      }
+      .pdf-export-view:empty {
+        display: none;
+      }
+
+      @media print {
+        body.pdf-exporting > *:not(#pdfExportView) {
+          display: none !important;
+        }
+        #pdfExportView {
+          position: static;
+          left: auto;
+          width: auto;
+          display: block !important;
+          background: #fff;
+          color: #111;
+        }
+        #pdfExportView .pdf-header {
+          margin-bottom: 24px;
+        }
+        #pdfExportView .pdf-tc {
+          break-after: page;
+          page-break-after: always;
+        }
+        #pdfExportView .pdf-tc:last-child {
+          break-after: auto;
+          page-break-after: auto;
+        }
+        #pdfExportView .pdf-evidence img {
+          max-width: 100%;
+          display: block;
+          margin: 8px 0;
+        }
+        #pdfExportView .pdf-evidence-item {
+          margin-bottom: 16px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -1748,6 +1791,8 @@
       </div>
     </div>
 
+    <div id="pdfExportView" class="pdf-export-view" hidden></div>
+
     <div
       id="settingsDrawer"
       class="settings-drawer hidden"
@@ -1789,7 +1834,12 @@
               <button id="exportBtn" class="secondary">Export Evidence</button>
               <button id="importBtn" class="secondary">Import Evidence</button>
               <button id="exportMdBtn" class="ghost">Export Summary MD</button>
+              <button id="exportPdfBtn" class="ghost">Download PDF</button>
             </div>
+            <label class="settings-checkbox">
+              <input id="includePdfScreenshots" type="checkbox" checked />
+              Include screenshot evidence in PDF
+            </label>
           </section>
 
           <section class="settings-section">
@@ -2017,6 +2067,9 @@
           clearUploadedEvidenceFilesBtn: $("clearUploadedEvidenceFilesBtn"),
           importInput: $("importInput"),
           exportMdBtn: $("exportMdBtn"),
+          exportPdfBtn: $("exportPdfBtn"),
+          includePdfScreenshots: $("includePdfScreenshots"),
+          pdfExportView: $("pdfExportView"),
           cancelWorkspaceWorkflowBtn: $("cancelWorkspaceWorkflowBtn"),
           startWorkspaceWorkflowBtn: $("startWorkspaceWorkflowBtn"),
           workspaceWorkflowPanel: $("workspaceWorkflowPanel"),
@@ -2093,6 +2146,9 @@
             clearUploadedXrayEvidenceFiles().catch(showError),
           );
           els.exportMdBtn.addEventListener("click", exportSummaryMarkdown);
+          els.exportPdfBtn.addEventListener("click", () =>
+            exportWorkspacePdf().catch(showError),
+          );
           els.themeToggleBtn.addEventListener("click", toggleTheme);
           els.helpToggleBtn.addEventListener("click", openHelpDialog);
           els.helpCloseBtn.addEventListener("click", closeHelpDialog);
@@ -4518,6 +4574,135 @@
             `${safeFileName(workspace.name)}-evidence-summary.md`,
             lines.join("\n"),
             "text/markdown",
+          );
+        }
+
+        async function exportWorkspacePdf() {
+          const workspace = activeWorkspace();
+          if (!workspace) {
+            toast("No workspace to export.");
+            return;
+          }
+
+          const includeImages = Boolean(els.includePdfScreenshots?.checked);
+          if (includeImages) {
+            await persistWorkspaceImageData(workspace);
+          }
+
+          const tcBlocks = workspace.testCases
+            .map((tc) => pdfTestCaseHtml(tc, includeImages))
+            .join("");
+
+          els.pdfExportView.innerHTML = `
+            <header class="pdf-header">
+              <h1>${escapeHtml(workspace.name)}</h1>
+              <p>Exported ${escapeHtml(new Date().toLocaleString())}</p>
+            </header>
+            ${tcBlocks}
+          `;
+
+          document.body.classList.add("pdf-exporting");
+          els.pdfExportView.hidden = false;
+
+          // Data-URI images decode asynchronously; without this, window.print()
+          // can snapshot the page before large screenshots finish rendering,
+          // leaving them blank in the printed/PDF output.
+          await waitForImagesToDecode(els.pdfExportView);
+
+          let restored = false;
+          const restore = () => {
+            if (restored) return;
+            restored = true;
+            els.pdfExportView.hidden = true;
+            els.pdfExportView.innerHTML = "";
+            document.body.classList.remove("pdf-exporting");
+          };
+          window.addEventListener("afterprint", restore, { once: true });
+          // Fallback in case afterprint never fires (e.g. print dialog closed in an
+          // unusual way); afterprint above still wins the race in normal use.
+          setTimeout(restore, 60000);
+
+          window.print();
+        }
+
+        function pdfTestCaseHtml(tc, includeImages) {
+          const rows = [];
+          rows.push(`<p><strong>Status:</strong> ${escapeHtml(normalizeStatus(tc.status))}</p>`);
+          if (tc.relatedAc) rows.push(`<p><strong>Related AC:</strong> ${escapeHtml(tc.relatedAc)}</p>`);
+          if (tc.summary) rows.push(`<p><strong>Summary:</strong> ${escapeHtml(tc.summary)}</p>`);
+          if (tc.precondition) rows.push(`<p><strong>Preconditions:</strong> ${escapeHtml(tc.precondition)}</p>`);
+          if (Array.isArray(tc.steps) && tc.steps.length) {
+            rows.push(
+              `<h4>Steps</h4><ol>${tc.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol>`,
+            );
+          }
+          if (tc.expectedResult) {
+            rows.push(`<h4>Expected Result</h4><p>${escapeHtml(tc.expectedResult)}</p>`);
+          }
+          if (tc.actualResult) {
+            rows.push(`<h4>Actual Result</h4><p>${escapeHtml(tc.actualResult)}</p>`);
+          }
+
+          const bugReport = tc.bugReport || {};
+          const bugFields = [
+            ["Environment", bugReport.env],
+            ["Bug Precondition", bugReport.precondition],
+            ["Steps to Reproduce", bugReport.stepsToReproduce],
+            ["Bug Actual Result", bugReport.actualResult],
+            ["Bug Expected Result", bugReport.expectedResult],
+          ].filter(([, value]) => value);
+          if (bugFields.length) {
+            rows.push(
+              `<h4>Bug Report</h4>${bugFields
+                .map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>`)
+                .join("")}`,
+            );
+          }
+
+          const images = tc.images || [];
+          if (images.length) {
+            rows.push(
+              `<h4>Evidence</h4><div class="pdf-evidence">${images
+                .map((image, index) => pdfEvidenceItemHtml(image, index, includeImages))
+                .join("")}</div>`,
+            );
+          }
+
+          return `
+            <section class="pdf-tc">
+              <h2>${escapeHtml(tc.id)}: ${escapeHtml(tc.title)}</h2>
+              ${rows.join("")}
+            </section>
+          `;
+        }
+
+        function pdfEvidenceItemHtml(image, index, includeImages) {
+          const note = normalizeMarkupText(image.note);
+          const img =
+            includeImages && image.dataUrl
+              ? `<img src="${escapeAttr(image.dataUrl)}" alt="Evidence ${index + 1}" />`
+              : "";
+          const caption = note
+            ? `<p class="pdf-evidence-note">${index + 1}. ${escapeHtml(note)}</p>`
+            : includeImages
+              ? ""
+              : `<p class="pdf-evidence-note">${index + 1}. (no note)</p>`;
+          if (!img && !caption) return "";
+          return `<div class="pdf-evidence-item">${img}${caption}</div>`;
+        }
+
+        async function waitForImagesToDecode(container) {
+          const images = Array.from(container.querySelectorAll("img"));
+          await Promise.all(
+            images.map((img) =>
+              img.decode
+                ? img.decode().catch(() => {})
+                : new Promise((resolve) => {
+                    if (img.complete) return resolve();
+                    img.addEventListener("load", resolve, { once: true });
+                    img.addEventListener("error", resolve, { once: true });
+                  }),
+            ),
           );
         }
 
