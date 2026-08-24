@@ -16,6 +16,13 @@ const MAX_BODY_BYTES = 500 * 1024 * 1024;
 const SERVICE_NAME = "Xray workflow service";
 const HTML_PATH = path.resolve(__dirname, "../xray-md-evidence.html");
 const ROOT_DIR = path.resolve(__dirname, "..");
+const SERVER_VERSION = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(ROOT_DIR, "package.json"), "utf8")).version || "";
+  } catch {
+    return "";
+  }
+})();
 const FINAL_RUN_STATUSES = new Set(["success", "partial", "failed", "cancelled"]);
 const RUN_WATCHDOG_MS = Number(process.env.XRAY_RUN_WATCHDOG_MS || 10 * 60 * 1000);
 const runs = new Map();
@@ -379,6 +386,7 @@ async function handleRequest(req, res, state = { port: PORT, host: HOST }) {
       service: SERVICE_NAME,
       status: "ready",
       port: state.port || PORT,
+      version: SERVER_VERSION,
     });
     return;
   }
