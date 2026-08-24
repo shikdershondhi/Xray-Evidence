@@ -179,6 +179,19 @@
         line-height: 1.45;
       }
 
+      .version-status-line {
+        font-size: 12.5px;
+        font-weight: 700;
+      }
+
+      .version-status-line.ok {
+        color: var(--ok, #1a7f37);
+      }
+
+      .version-status-line.warn {
+        color: #b45309;
+      }
+
       .blue-link {
         color: var(--blue);
       }
@@ -1582,6 +1595,7 @@
           <h1>Xray Markdown Evidence Builder</h1>
           <span class="author-credit">Built by SHIKDER SHONDHI</span>
         </div>
+        <p id="versionStatusLine" class="sub version-status-line"></p>
         <p class="sub">
           Reusable project utility for loading Markdown or CSV test cases,
           pasting screenshots against each TC, saving evidence locally, and
@@ -3886,7 +3900,42 @@
             workflowState.serviceAvailable = false;
           }
           renderWorkflowPanels();
+          renderVersionStatus();
           checkForUpdates();
+        }
+
+        function renderVersionStatus() {
+          const line = $("versionStatusLine");
+          if (!line) return;
+          const appLabel = `v${APP_VERSION}`;
+          line.classList.remove("ok", "warn");
+          if (!workflowState.serviceAvailable) {
+            line.textContent =
+              "App v" + APP_VERSION +
+              " · Local server: not running — start it with sh ~/xray-evidence-server/start-server.sh (latest v" +
+              APP_VERSION + ")";
+            line.classList.add("warn");
+            return;
+          }
+          const serverVersion = workflowState.serverVersion;
+          if (!serverVersion) {
+            line.textContent =
+              "Local server: running (version unknown, update recommended). Latest server version: v" +
+              APP_VERSION;
+            line.classList.add("warn");
+            return;
+          }
+          if (serverVersion === APP_VERSION) {
+            line.textContent =
+              "Local server v" + serverVersion + " — up to date (app " + appLabel + ")";
+            line.classList.add("ok");
+            return;
+          }
+          line.textContent =
+            "Local server v" + serverVersion +
+            " — update needed. Latest server version: v" + APP_VERSION +
+            ". Re-run the installer command to update.";
+          line.classList.add("warn");
         }
 
         function scheduleUpdateCheck() {
