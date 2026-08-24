@@ -39,6 +39,7 @@ say "Writing start scripts"
 cat > "$INSTALL_DIR/start-server.sh" <<'EOF'
 #!/bin/sh
 cd "$(dirname "$0")" || exit 1
+export XRAY_WEB_APP_URL="https://shikdershondhi.github.io/Xray-Evidence/xray-md-evidence.html"
 npm run evidence:workflow
 EOF
 chmod +x "$INSTALL_DIR/start-server.sh"

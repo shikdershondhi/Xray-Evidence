@@ -441,6 +441,10 @@ async function handleRequest(req, res, state = { port: PORT, host: HOST }) {
   sendJson(res, 404, { error: "Route not found." });
 }
 
+function getOpenUrl(localUrl) {
+  return process.env.XRAY_WEB_APP_URL || localUrl;
+}
+
 function openLocalUrl(url) {
   const command =
     process.platform === "win32"
@@ -544,7 +548,7 @@ async function startWorkflowServer({ open = false, port = PORT, host = HOST } = 
       state.port = address.port;
       const url = `http://${host}:${state.port}`;
       console.log(`Xray Evidence server listening on ${url}`);
-      if (open) openLocalUrl(url);
+      if (open) openLocalUrl(getOpenUrl(url));
       const shutdown = async (signal) => {
         console.log(`Received ${signal}, closing shared browser...`);
         await closeSharedBrowser().catch(() => {});
@@ -562,7 +566,7 @@ async function startWorkflowServer({ open = false, port = PORT, host = HOST } = 
       if (existingServiceReady) {
         const url = `http://${host}:${candidatePort}`;
         console.log(`Xray Evidence server is already running on ${url}`);
-        if (open) openLocalUrl(url);
+        if (open) openLocalUrl(getOpenUrl(url));
         return null;
       }
     }
