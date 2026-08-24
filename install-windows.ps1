@@ -47,6 +47,7 @@ Say "Writing start script"
 @"
 @echo off
 cd /d "%~dp0"
+set "XRAY_WEB_APP_URL=https://shikdershondhi.github.io/Xray-Evidence/xray-md-evidence.html"
 npm run evidence:workflow
 "@ | Set-Content -Path (Join-Path $InstallDir "start-server.bat") -Encoding ASCII
 
