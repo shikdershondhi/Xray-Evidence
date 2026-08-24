@@ -152,6 +152,17 @@
         color: var(--ink);
       }
 
+      .nav-open-app {
+        border: 1px solid var(--line-strong);
+        background: var(--accent-strong, #2f6fed);
+        color: #fff !important;
+        font-weight: 800;
+      }
+
+      .nav-open-app:hover {
+        filter: brightness(1.08);
+      }
+
       .theme-toggle {
         display: inline-flex;
         align-items: center;
@@ -812,6 +823,7 @@
               <a href="#features">Features</a>
               <a href="#setup">Setup</a>
               <a href="https://github.com/shikdershondhi/Xray-Evidence">GitHub</a>
+              <a class="nav-open-app" href="xray-md-evidence.html">Open App</a>
             </div>
             <button
               class="theme-toggle"
@@ -986,6 +998,50 @@
                 One click on a testcase card downloads its combined evidence image
                 as a JPG file, ready to attach in a Jira comment when clipboard
                 paste isn't convenient.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">WB</div>
+              <h3>Web app from anywhere<span class="badge-new">New</span></h3>
+              <p>
+                Open the Evidence Builder directly from this site on any device.
+                The UI runs in your browser while the automation server stays on
+                your own PC.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">UP</div>
+              <h3>Update notifications<span class="badge-new">New</span></h3>
+              <p>
+                The app shows your installed local server version next to the
+                latest required version and notifies you when a new update is
+                live or the server needs a re-install.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">PD</div>
+              <h3>PDF export<span class="badge-new">New</span></h3>
+              <p>
+                Export testcase evidence as a PDF document with optional
+                screenshots included, handy for offline review and sharing with
+                stakeholders.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">NV</div>
+              <h3>Search and navigate test cases<span class="badge-new">New</span></h3>
+              <p>
+                Search across TC ID, title, acceptance criteria, and source file,
+                then jump between test cases with previous and next navigation.
+              </p>
+            </article>
+            <article class="feature">
+              <div class="feature-icon" aria-hidden="true">OS</div>
+              <h3>One-line installer per OS<span class="badge-new">New</span></h3>
+              <p>
+                Install the local workflow server with a single terminal command
+                for macOS, Linux, or Windows — no manual clone or dependency
+                setup needed.
               </p>
             </article>
           </div>
