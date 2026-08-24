@@ -768,6 +768,20 @@
         padding: 2px 4px;
       }
 
+      .help-cmd-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 8px 0;
+      }
+
+      .help-cmd {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        font-size: 12px;
+      }
+
       .bug-report-panel {
         max-height: calc(100vh - 104px);
         overflow: auto;
@@ -1652,6 +1666,71 @@
             </p>
           </section>
           <section class="help-section">
+            <h3>Web App &amp; Local Server Install</h3>
+            <p>
+              When you open this page from the website
+              (shikdershondhi.github.io), the UI runs in your browser from any
+              device, and the workflow server runs on your own PC. Install it
+              once from a terminal.
+            </p>
+            <ol>
+              <li>
+                Install Node.js LTS if <code>node -v</code> does not work
+                (<a href="https://nodejs.org" rel="noopener" target="_blank">nodejs.org</a>).
+              </li>
+              <li>Copy the installer command for your OS and run it:</li>
+            </ol>
+            <div class="help-cmd-row">
+              <code class="help-cmd">curl -fsSL https://shikdershondhi.github.io/Xray-Evidence/install-mac-linux.sh | bash</code>
+              <button class="ghost small" type="button" data-copy="curl -fsSL https://shikdershondhi.github.io/Xray-Evidence/install-mac-linux.sh | bash">Copy</button>
+            </div>
+            <div class="help-cmd-row">
+              <code class="help-cmd">irm https://shikdershondhi.github.io/Xray-Evidence/install-windows.ps1 | iex</code>
+              <button class="ghost small" type="button" data-copy="irm https://shikdershondhi.github.io/Xray-Evidence/install-windows.ps1 | iex">Copy</button>
+            </div>
+            <p>
+              The installer downloads the server into
+              <code>~/xray-evidence-server</code>, installs npm dependencies and
+              Playwright Chromium (a few minutes).
+            </p>
+            <ol start="3">
+              <li>Start the server whenever you need automation:</li>
+            </ol>
+            <div class="help-cmd-row">
+              <code class="help-cmd">sh ~/xray-evidence-server/start-server.sh</code>
+              <button class="ghost small" type="button" data-copy="sh ~/xray-evidence-server/start-server.sh">Copy</button>
+            </div>
+            <p>
+              Windows: double-click
+              <code>%USERPROFILE%\xray-evidence-server\start-server.bat</code>.
+            </p>
+            <ol start="4">
+              <li>
+                Open this page from the website. It talks to your local server
+                at <code>http://127.0.0.1:39291</code>. The first workflow run
+                opens a browser window where you log in to Jira manually within
+                3 minutes; the session is then reused.
+              </li>
+            </ol>
+            <ul>
+              <li>
+                <strong>Update:</strong> re-run the installer command — it
+                replaces the folder with the latest version.
+              </li>
+              <li>
+                <strong>Different port:</strong> start with
+                <code>XRAY_WORKFLOW_PORT=&lt;port&gt;</code>, then set localStorage key
+                <code>neustring-xray-md-evidence-builder-v1-workflow-url</code> to
+                <code>http://127.0.0.1:&lt;port&gt;</code>.
+              </li>
+              <li>
+                <strong>Service unavailable:</strong> make sure the server
+                terminal is running and no firewall blocks port 39291.
+              </li>
+              <li><strong>Uninstall:</strong> delete the <code>~/xray-evidence-server</code> folder.</li>
+            </ul>
+          </section>
+          <section class="help-section">
             <h3>Daily Workflow</h3>
             <ol>
               <li>Run <code>npm run evidence:workflow</code> from the repo.</li>
@@ -2240,6 +2319,20 @@
           );
           els.helpDialog.addEventListener("click", (event) => {
             if (event.target === els.helpDialog) closeHelpDialog();
+          });
+          document.addEventListener("click", async (event) => {
+            const btn = event.target.closest?.("[data-copy]");
+            if (!btn) return;
+            try {
+              await navigator.clipboard.writeText(btn.dataset.copy || "");
+              const original = btn.textContent;
+              btn.textContent = "Copied!";
+              setTimeout(() => {
+                btn.textContent = original;
+              }, 1600);
+            } catch {
+              showError(new Error("Clipboard copy was blocked by the browser."));
+            }
           });
           els.bugReportDialog.addEventListener("click", (event) => {
             if (event.target === els.bugReportDialog) closeBugReportDialog();
