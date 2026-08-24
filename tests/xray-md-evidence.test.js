@@ -287,17 +287,62 @@ test("uploaded in Xray checkbox defaults unchecked, persists, and filters cards"
       true,
     );
 
-    await page.locator("#evidenceFilter").selectOption("uploaded");
+    await page.locator("#evidenceFilterBtn").click();
+    await page.locator('#evidenceFilterMenu input[value="uploaded"]').check();
     await assert.equal(await page.locator('article[data-tc="TC-001"]').count(), 1);
     await assert.equal(await page.locator('article[data-tc="TC-002"]').count(), 1);
 
-    await page.locator("#evidenceFilter").selectOption("all");
+    await page.locator("#clearFiltersBtn").click();
     await page
       .locator('input[data-action="xray-uploaded"][data-tc="TC-001"]')
       .uncheck();
-    await page.locator("#evidenceFilter").selectOption("not-uploaded");
+    await page.locator("#evidenceFilterBtn").click();
+    await page.locator('#evidenceFilterMenu input[value="not-uploaded"]').check();
     await assert.equal(await page.locator('article[data-tc="TC-001"]').count(), 1);
     await assert.equal(await page.locator('article[data-tc="TC-002"]').count(), 0);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("filter supports multiple options, shows match count, and clear button", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "Login flow", status: "pass" }),
+        testCaseFixture({ id: "TC-002", title: "Upload evidence", status: "fail" }),
+        testCaseFixture({ id: "TC-003", title: "Logout flow", status: "unset" }),
+      ]),
+    );
+
+    await page.goto(htmlUrl);
+    await page.waitForSelector("article.tc-card");
+    await assert.equal(await page.locator("article.tc-card").count(), 3);
+    await assert.equal(await page.locator("#clearFiltersBtn").isHidden(), true);
+    assert.equal(await page.locator("#tcFilterCount").textContent(), "3 / 3 TCs");
+
+    await page.locator("#evidenceFilterBtn").click();
+    await page.locator('#evidenceFilterMenu input[value="pass"]').check();
+    await assert.equal(await page.locator("article.tc-card").count(), 1);
+    assert.equal(await page.locator("#tcFilterCount").textContent(), "1 / 3 TCs");
+    await assert.equal(await page.locator("#clearFiltersBtn").isHidden(), false);
+
+    await page.locator('#evidenceFilterMenu input[value="fail"]').check();
+    await assert.equal(await page.locator("article.tc-card").count(), 0);
+    assert.equal(
+      await page.locator("#evidenceFilterLabel").textContent(),
+      "Pass + Fail",
+    );
+
+    await page.locator("#clearFiltersBtn").click();
+    await assert.equal(await page.locator("article.tc-card").count(), 3);
+    assert.equal(await page.locator("#tcFilterCount").textContent(), "3 / 3 TCs");
+    await assert.equal(await page.locator("#clearFiltersBtn").isHidden(), true);
+    assert.equal(await page.locator("#evidenceFilterLabel").textContent(), "All TCs");
   } finally {
     await browser.close();
   }

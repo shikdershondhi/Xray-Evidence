@@ -267,6 +267,118 @@
         flex: none;
       }
 
+      .tc-filter {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .tc-filter-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 40px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--field-bg);
+        color: var(--ink);
+        padding: 9px 11px;
+        font-size: 14px;
+        font-weight: 400;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+
+      .tc-filter-btn:hover {
+        background: var(--field-bg);
+        border-color: var(--blue);
+      }
+
+      .tc-filter-btn .tc-filter-caret {
+        flex: none;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .tc-filter-btn.active {
+        border-color: var(--blue);
+        color: var(--blue);
+        font-weight: 650;
+      }
+
+      .tc-filter-menu[hidden] {
+        display: none;
+      }
+
+      .tc-filter-menu {
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        min-width: 230px;
+        background: var(--panel-bg, var(--field-bg));
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+        padding: 6px;
+        z-index: 60;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .tc-filter-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 400;
+        white-space: nowrap;
+      }
+
+      .tc-filter-option:hover {
+        background: var(--field-muted-bg);
+      }
+
+      .tc-filter-option input[type="checkbox"] {
+        min-height: 0;
+        width: 16px;
+        height: 16px;
+        accent-color: var(--blue);
+        cursor: pointer;
+      }
+
+      .tc-filter-count {
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+        flex: none;
+      }
+
+      .tc-filter-clear {
+        flex: none;
+        min-height: 40px;
+        min-width: 40px;
+        padding: 9px 12px;
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        color: #dc2626;
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      .tc-filter-clear:hover {
+        background: rgba(220, 38, 38, 0.1);
+        border-color: #dc2626;
+      }
+
       input,
       select,
       button {
@@ -1664,13 +1776,51 @@
               &#8595;
             </button>
           </div>
-          <select id="evidenceFilter" aria-label="Filter test cases by evidence">
-            <option value="all">All TCs</option>
-            <option value="with">With Evidence</option>
-            <option value="without">Without Evidence</option>
-            <option value="uploaded">Uploaded in Xray</option>
-            <option value="not-uploaded">Not Uploaded in Xray</option>
-          </select>
+          <div class="tc-filter">
+            <button
+              type="button"
+              id="evidenceFilterBtn"
+              class="tc-filter-btn"
+              aria-haspopup="true"
+              aria-expanded="false"
+              title="Filter test cases"
+            >
+              <span id="evidenceFilterLabel">All TCs</span>
+              <span class="tc-filter-caret">&#9662;</span>
+            </button>
+            <div id="evidenceFilterMenu" class="tc-filter-menu" hidden>
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="with" /> With Evidence</label
+              >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="without" /> Without Evidence</label
+              >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="uploaded" /> Uploaded in Xray</label
+              >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="not-uploaded" /> Not Uploaded in
+                Xray</label
+              >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="pass" /> Status: Pass</label
+              >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="fail" /> Status: Fail</label
+              >
+            </div>
+            <span id="tcFilterCount" class="tc-filter-count"></span>
+            <button
+              type="button"
+              id="clearFiltersBtn"
+              class="tc-filter-clear"
+              title="Clear filters"
+              aria-label="Clear filters"
+              hidden
+            >
+              &#10005;
+            </button>
+          </div>
         </div>
       </div>
       <button
@@ -1953,9 +2103,11 @@
           <section class="help-section">
             <h3>Filtering Test Cases</h3>
             <p>
-              Use the evidence filter beside search to show all test cases,
-              only test cases with saved screenshots, or only test cases still
-              missing screenshots.
+              Use the filter beside search to combine multiple options —
+              evidence (with/without), Xray upload state (uploaded/not
+              uploaded), and status (Pass/Fail). The count next to the filter
+              shows how many test cases match, and the ✕ button clears all
+              active filters.
             </p>
           </section>
         </div>
@@ -2248,6 +2400,7 @@
         const APP_VERSION = "1.6.0";
         const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
         const state = loadState();
+        const activeTcFilters = new Set();
         const workflowState = {
           summary: "",
           browserMode: "headless",
@@ -2272,7 +2425,11 @@
           tcPrevBtn: $("tcPrevBtn"),
           tcNavCount: $("tcNavCount"),
           tcNextBtn: $("tcNextBtn"),
-          evidenceFilter: $("evidenceFilter"),
+          evidenceFilterBtn: $("evidenceFilterBtn"),
+          evidenceFilterMenu: $("evidenceFilterMenu"),
+          evidenceFilterLabel: $("evidenceFilterLabel"),
+          tcFilterCount: $("tcFilterCount"),
+          clearFiltersBtn: $("clearFiltersBtn"),
           newProjectBtn: $("newProjectBtn"),
           exportBtn: $("exportBtn"),
           importBtn: $("importBtn"),
@@ -2392,7 +2549,35 @@
           });
           els.tcPrevBtn.addEventListener("click", () => navigateTc(-1));
           els.tcNextBtn.addEventListener("click", () => navigateTc(1));
-          els.evidenceFilter.addEventListener("change", () => {
+          els.evidenceFilterBtn.addEventListener("click", () => {
+            const menu = els.evidenceFilterMenu;
+            menu.hidden = !menu.hidden;
+            els.evidenceFilterBtn.setAttribute(
+              "aria-expanded",
+              menu.hidden ? "false" : "true",
+            );
+          });
+          document.addEventListener("click", (event) => {
+            if (
+              !els.evidenceFilterMenu.hidden &&
+              !event.target.closest(".tc-filter")
+            ) {
+              els.evidenceFilterMenu.hidden = true;
+              els.evidenceFilterBtn.setAttribute("aria-expanded", "false");
+            }
+          });
+          els.evidenceFilterMenu.addEventListener("change", () => {
+            syncTcFiltersFromMenu();
+            tcNavIndex = -1;
+            render();
+          });
+          els.clearFiltersBtn.addEventListener("click", () => {
+            els.evidenceFilterMenu
+              .querySelectorAll('input[type="checkbox"]')
+              .forEach((input) => {
+                input.checked = false;
+              });
+            syncTcFiltersFromMenu();
             tcNavIndex = -1;
             render();
           });
@@ -3277,17 +3462,52 @@
             });
         }
 
+        function syncTcFiltersFromMenu() {
+          activeTcFilters.clear();
+          els.evidenceFilterMenu
+            .querySelectorAll('input[type="checkbox"]:checked')
+            .forEach((input) => activeTcFilters.add(input.value));
+          updateTcFilterUi();
+        }
+
+        function updateTcFilterUi() {
+          const labels = {
+            with: "With Evidence",
+            without: "Without Evidence",
+            uploaded: "Uploaded in Xray",
+            "not-uploaded": "Not Uploaded in Xray",
+            pass: "Pass",
+            fail: "Fail",
+          };
+          const selected = [...activeTcFilters];
+          if (!selected.length) {
+            els.evidenceFilterLabel.textContent = "All TCs";
+            els.evidenceFilterBtn.classList.remove("active");
+          } else {
+            const names = selected.map((value) => labels[value] || value);
+            els.evidenceFilterLabel.textContent =
+              names.length <= 2
+                ? names.join(" + ")
+                : `${names[0]} + ${names.length - 1} more`;
+            els.evidenceFilterBtn.classList.add("active");
+          }
+          els.clearFiltersBtn.hidden = !selected.length;
+        }
+
         function renderCards() {
           const workspace = activeWorkspace();
           const query = els.searchInput.value.trim().toLowerCase();
-          const evidenceFilter = els.evidenceFilter.value;
+          const totalTcs = workspace?.testCases.length || 0;
           const testCases = workspace
             ? workspace.testCases.filter(
                 (tc) =>
-                  matchesQuery(tc, query) &&
-                  matchesEvidenceFilter(tc, evidenceFilter),
+                  matchesQuery(tc, query) && matchesEvidenceFilter(tc, activeTcFilters),
               )
             : [];
+
+          els.tcFilterCount.textContent = workspace
+            ? `${testCases.length} / ${totalTcs} TCs`
+            : "";
 
           els.emptyState.textContent =
             workspace && workspace.testCases.length
@@ -5929,13 +6149,18 @@
             .some((value) => String(value).toLowerCase().includes(query));
         }
 
-        function matchesEvidenceFilter(tc, filter) {
+        function matchesEvidenceFilter(tc, filters) {
+          if (!filters || !filters.size) return true;
           const hasEvidence = Boolean(tc.images?.length);
-          if (filter === "with") return hasEvidence;
-          if (filter === "without") return !hasEvidence;
-          if (filter === "uploaded") return Boolean(tc.xrayUploaded);
-          if (filter === "not-uploaded") return !tc.xrayUploaded;
-          return true;
+          return [...filters].every((filter) => {
+            if (filter === "with") return hasEvidence;
+            if (filter === "without") return !hasEvidence;
+            if (filter === "uploaded") return Boolean(tc.xrayUploaded);
+            if (filter === "not-uploaded") return !tc.xrayUploaded;
+            if (filter === "pass") return normalizeStatus(tc.status) === "pass";
+            if (filter === "fail") return normalizeStatus(tc.status) === "fail";
+            return true;
+          });
         }
 
         function findHeader(headers, candidates) {
