@@ -164,6 +164,37 @@
         margin-top: 10px;
       }
 
+      .search-nav {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        min-width: 0;
+      }
+
+      .search-nav input[type="search"] {
+        flex: 1;
+      }
+
+      .tc-nav-btn {
+        min-width: 40px;
+        padding: 9px 10px;
+        flex: none;
+      }
+
+      .tc-nav-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .tc-nav-count {
+        font-size: 12px;
+        color: var(--muted);
+        min-width: 48px;
+        text-align: center;
+        white-space: nowrap;
+        flex: none;
+      }
+
       input,
       select,
       button {
@@ -964,6 +995,11 @@
         overflow: hidden;
       }
 
+      .tc-card.nav-target {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(31, 102, 209, 0.28);
+      }
+
       .tc-head {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
@@ -1495,11 +1531,36 @@
           exporting/importing evidence bundles for later Xray use.
         </p>
         <div class="toolbar">
-          <input
-            id="searchInput"
-            type="search"
-            placeholder="Search TC ID, title, AC, or file..."
-          />
+          <div class="search-nav">
+            <input
+              id="searchInput"
+              type="search"
+              placeholder="Search TC ID, title, AC, or file..."
+            />
+            <button
+              id="tcPrevBtn"
+              class="tc-nav-btn"
+              type="button"
+              aria-label="Previous test case"
+              title="Previous test case"
+            >
+              &#8593;
+            </button>
+            <span
+              id="tcNavCount"
+              class="tc-nav-count"
+              aria-live="polite"
+            ></span>
+            <button
+              id="tcNextBtn"
+              class="tc-nav-btn"
+              type="button"
+              aria-label="Next test case"
+              title="Next test case"
+            >
+              &#8595;
+            </button>
+          </div>
           <select id="evidenceFilter" aria-label="Filter test cases by evidence">
             <option value="all">All TCs</option>
             <option value="with">With Evidence</option>
@@ -2034,6 +2095,9 @@
         const els = {
           fileInput: $("fileInput"),
           searchInput: $("searchInput"),
+          tcPrevBtn: $("tcPrevBtn"),
+          tcNavCount: $("tcNavCount"),
+          tcNextBtn: $("tcNextBtn"),
           evidenceFilter: $("evidenceFilter"),
           newProjectBtn: $("newProjectBtn"),
           exportBtn: $("exportBtn"),
@@ -2102,6 +2166,7 @@
         const standaloneBugReport = { images: [] };
         let activeBugReportTcId = "";
         let activeBugReportMode = "tc";
+        let tcNavIndex = -1;
 
         applyTheme(loadTheme());
         bindGlobalEvents();
@@ -2116,8 +2181,22 @@
 
         function bindGlobalEvents() {
           els.fileInput.addEventListener("change", handleSourceFile);
-          els.searchInput.addEventListener("input", render);
-          els.evidenceFilter.addEventListener("change", render);
+          els.searchInput.addEventListener("input", () => {
+            tcNavIndex = -1;
+            render();
+          });
+          els.searchInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              navigateTc(1);
+            }
+          });
+          els.tcPrevBtn.addEventListener("click", () => navigateTc(-1));
+          els.tcNextBtn.addEventListener("click", () => navigateTc(1));
+          els.evidenceFilter.addEventListener("change", () => {
+            tcNavIndex = -1;
+            render();
+          });
           els.newProjectBtn.addEventListener("click", createBlankWorkspace);
           els.exportBtn.addEventListener("click", () =>
             exportWorkspaceJson().catch(showError),
@@ -3007,6 +3086,59 @@
           );
           els.cards.innerHTML = testCases.map(cardHtml).join("");
           bindCardEvents();
+          updateTcNav();
+        }
+
+        function visibleTcCards() {
+          return Array.from(els.cards.querySelectorAll(".tc-card"));
+        }
+
+        function updateTcNav() {
+          const testCases = activeWorkspace()?.testCases || [];
+          const total = testCases.length;
+          const cards = visibleTcCards();
+          if (!total || !cards.length) {
+            tcNavIndex = -1;
+            els.tcNavCount.textContent = "";
+          } else {
+            const visibleIds = new Set(cards.map((card) => card.dataset.tc));
+            if (
+              tcNavIndex < 0 ||
+              tcNavIndex >= total ||
+              !visibleIds.has(testCases[tcNavIndex].id)
+            ) {
+              tcNavIndex = Math.max(
+                0,
+                testCases.findIndex((tc) => visibleIds.has(tc.id)),
+              );
+            }
+            els.tcNavCount.textContent = `${tcNavIndex + 1} / ${total}`;
+          }
+          els.tcPrevBtn.disabled = !total || !cards.length;
+          els.tcNextBtn.disabled = !total || !cards.length;
+        }
+
+        function navigateTc(direction) {
+          const testCases = activeWorkspace()?.testCases || [];
+          if (!testCases.length) return;
+          updateTcNav();
+          if (tcNavIndex < 0) return;
+          tcNavIndex =
+            (((tcNavIndex + direction) % testCases.length) + testCases.length) %
+            testCases.length;
+          const tc = testCases[tcNavIndex];
+          const query = els.searchInput.value.trim().toLowerCase();
+          if (query && !matchesQuery(tc, query)) {
+            els.searchInput.value = tc.id;
+          }
+          render();
+          const card = els.cards.querySelector(
+            `article[data-tc="${cssEscape(tc.id)}"]`,
+          );
+          if (card) {
+            card.classList.add("nav-target");
+            card.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
         }
 
         function cardHtml(tc) {

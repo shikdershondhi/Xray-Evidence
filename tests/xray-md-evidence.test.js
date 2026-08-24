@@ -292,6 +292,74 @@ test("uploaded in Xray checkbox defaults unchecked, persists, and filters cards"
   }
 });
 
+test("search bar prev/next buttons navigate between matching test cases", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "Login flow" }),
+        testCaseFixture({ id: "TC-002", title: "Upload evidence" }),
+        testCaseFixture({ id: "TC-003", title: "Logout flow" }),
+      ]),
+    );
+
+    await page.goto(htmlUrl);
+    await page.locator('article[data-tc="TC-001"]').waitFor();
+
+    const count = page.locator("#tcNavCount");
+    const nextBtn = page.locator("#tcNextBtn");
+    const prevBtn = page.locator("#tcPrevBtn");
+    const search = page.locator("#searchInput");
+
+    await assert.equal((await count.textContent()).trim(), "1 / 3");
+
+    await nextBtn.click();
+    await assert.equal((await count.textContent()).trim(), "2 / 3");
+    assert.match(
+      await page.locator('article[data-tc="TC-002"]').getAttribute("class"),
+      /nav-target/,
+    );
+
+    await prevBtn.click();
+    await prevBtn.click();
+    await assert.equal((await count.textContent()).trim(), "3 / 3");
+    assert.match(
+      await page.locator('article[data-tc="TC-003"]').getAttribute("class"),
+      /nav-target/,
+    );
+    assert.doesNotMatch(
+      await page.locator('article[data-tc="TC-001"]').getAttribute("class"),
+      /nav-target/,
+    );
+
+    await search.fill("002");
+    await assert.equal(await page.locator("article.tc-card").count(), 1);
+    await assert.equal((await count.textContent()).trim(), "2 / 3");
+
+    await nextBtn.click();
+    await assert.equal(await search.inputValue(), "TC-003");
+    await assert.equal(await page.locator("article.tc-card").count(), 1);
+    await assert.equal((await count.textContent()).trim(), "3 / 3");
+    assert.match(
+      await page.locator('article[data-tc="TC-003"]').getAttribute("class"),
+      /nav-target/,
+    );
+
+    await prevBtn.click();
+    await assert.equal(await search.inputValue(), "TC-002");
+    await assert.equal(await page.locator("article.tc-card").count(), 1);
+    await assert.equal((await count.textContent()).trim(), "2 / 3");
+
+    await search.fill("");
+    await assert.equal((await count.textContent()).trim(), "1 / 3");
+  } finally {
+    await browser.close();
+  }
+});
+
 test("testcase Save pushes to Gist without confirmation", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
