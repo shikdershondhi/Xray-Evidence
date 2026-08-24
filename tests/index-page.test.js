@@ -23,6 +23,14 @@ test("landing page keeps the open-app CTA, installer links, and author footer", 
   assert.match(indexHtml, /Built by SHIKDER SHONDHI/);
 });
 
+test("landing page manual has copy buttons for every install command", () => {
+  const copyButtons = indexHtml.match(/class="copy-btn"/g) || [];
+  assert.ok(copyButtons.length >= 4, "expected at least four copy buttons");
+  assert.match(indexHtml, /data-copy="curl -fsSL [^"]+install-mac-linux\.sh \| bash"/);
+  assert.match(indexHtml, /data-copy="irm [^"]+install-windows\.ps1 \| iex"/);
+  assert.match(indexHtml, /navigator\.clipboard\.writeText/);
+});
+
 test("landing page includes persistent system-aware theme controls", () => {
   assert.match(indexHtml, /id="themeToggle"/);
   assert.match(indexHtml, /xray-evidence-page-theme/);
@@ -38,7 +46,7 @@ test("landing page advertises the expected developer-tool feature surface", () =
     "Local Playwright",
     "Local-only data",
     "Gist sync",
-    "Run Setup in Terminal",
+    "User Manual",
     "Uploaded evidence cleanup",
     "clear saved screenshot files",
     "npm run setup",
