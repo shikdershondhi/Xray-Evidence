@@ -670,6 +670,30 @@
         font-weight: 850;
       }
 
+      .copy-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.06);
+        color: #d7e2f4;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+      }
+
+      .copy-btn:hover {
+        background: rgba(255, 255, 255, 0.14);
+      }
+
+      .copy-btn.copied {
+        color: #7ce3a1;
+        border-color: rgba(124, 227, 161, 0.5);
+      }
+
       pre {
         margin: 0;
         padding: 18px;
@@ -817,7 +841,7 @@
               <a class="button primary" href="xray-md-evidence.html">
                 Open Evidence Builder
               </a>
-              <a class="button secondary" href="#setup">Run Setup in Terminal</a>
+              <a class="button secondary" href="#setup">User Manual &amp; Setup</a>
               <a
                 class="button subtle"
                 href="https://github.com/shikdershondhi/Xray-Evidence"
@@ -969,53 +993,85 @@
 
         <section id="setup" class="setup" aria-labelledby="setup-title">
           <div class="setup-copy">
-            <h2 id="setup-title">Run Setup in Terminal</h2>
+            <h2 id="setup-title">User Manual &amp; Setup</h2>
             <p>
-              The Evidence Builder runs in your browser from this site. The
-              workflow server (Playwright automation against Jira Xray) is
-              installed on your own PC. Pick your operating system and run the
-              one-line command in a terminal.
+              The Evidence Builder runs in your browser from this site — nothing
+              to install for that part. The workflow server (Playwright
+              automation against Jira Xray) is installed on your own PC and
+              stays local. Follow the steps below once; after that you only
+              start the server when you need automation.
             </p>
             <div class="setup-list">
               <div class="setup-item">
                 <span class="step-num">1</span>
                 <div>
                   <strong>Install Node.js LTS</strong>
-                  <span>If <code>node -v</code> does not work, get it from <a href="https://nodejs.org" rel="noopener">nodejs.org</a>.</span>
+                  <span>If <code>node -v</code> does not work in your terminal, get it from <a href="https://nodejs.org" rel="noopener">nodejs.org</a>, then reopen the terminal.</span>
                 </div>
               </div>
               <div class="setup-item">
                 <span class="step-num">2</span>
                 <div>
                   <strong>Run the installer for your OS</strong>
-                  <span>Downloads the server into <code>~/xray-evidence-server</code>, installs dependencies and Playwright Chromium.</span>
+                  <span>Copy the command from one of the panels on the right and paste it into Terminal (macOS/Linux) or PowerShell (Windows). It downloads the server into <code>~/xray-evidence-server</code>, installs npm dependencies and Playwright Chromium (a few minutes).</span>
                 </div>
               </div>
               <div class="setup-item">
                 <span class="step-num">3</span>
                 <div>
                   <strong>Start the server</strong>
-                  <span>Run <code>start-server</code> from the install folder, then open the Evidence Builder here and connect.</span>
+                  <span>Run the start command shown under "Start the server later". Keep the terminal window open while you work.</span>
+                </div>
+              </div>
+              <div class="setup-item">
+                <span class="step-num">4</span>
+                <div>
+                  <strong>Open the app and connect</strong>
+                  <span><a href="xray-md-evidence.html">Open Evidence Builder</a>. It automatically talks to your local server at <code>http://127.0.0.1:39291</code>. The first workflow run opens a browser window where you log in to Jira manually (3-minute window); the session is then reused.</span>
                 </div>
               </div>
             </div>
 
-            <h3 style="margin:28px 0 12px;font-size:18px;">Start the server later</h3>
+            <h3 style="margin:28px 0 12px;font-size:18px;">Start the server later (everyday use)</h3>
             <p style="color:var(--muted);line-height:1.6;">
               macOS/Linux:
               <code>sh ~/xray-evidence-server/start-server.sh</code><br />
               Windows: double-click
               <code>%USERPROFILE%\xray-evidence-server\start-server.bat</code><br />
-              The web app talks to it at
-              <code>http://127.0.0.1:39291</code>.
+              Then open the Evidence Builder from this site.
+            </p>
+
+            <h3 style="margin:28px 0 12px;font-size:18px;">Good to know</h3>
+            <p style="color:var(--muted);line-height:1.6;">
+              <strong>Update:</strong> re-run the installer command — it replaces
+              the folder with the latest version.<br />
+              <strong>Different port:</strong> start with
+              <code>XRAY_WORKFLOW_PORT=&lt;port&gt;</code>, then set key
+              <code>neustring-xray-md-evidence-builder-v1-workflow-url</code> to
+              <code>http://127.0.0.1:&lt;port&gt;</code> in the app's localStorage.<br />
+              <strong>Privacy:</strong> evidence, screenshots, and workspace data
+              stay in your browser; the server only talks to Jira/Xray from your PC.<br />
+              <strong>Uninstall:</strong> delete the
+              <code>~/xray-evidence-server</code> folder.
+            </p>
+
+            <h3 style="margin:28px 0 12px;font-size:18px;">Troubleshooting</h3>
+            <p style="color:var(--muted);line-height:1.6;">
+              <strong>App says service unavailable:</strong> make sure the server
+              terminal is still running and no firewall is blocking port 39291.<br />
+              <strong>Jira login expired:</strong> restart the server and run a
+              workflow again — it will reopen the manual login window.<br />
+              <strong>Installer fails on npm step:</strong> check your internet
+              connection and Node.js version (<code>node -v</code> should be 18+),
+              then re-run the installer.
             </p>
           </div>
 
           <div style="display:grid;gap:16px;align-content:start;">
             <div class="terminal" aria-label="macOS and Linux setup commands">
               <div class="terminal-top">
-                <span>macOS / Linux</span>
-                <span>terminal</span>
+                <span>Step 2 — macOS / Linux</span>
+                <button class="copy-btn" type="button" data-copy="curl -fsSL https://shikdershondhi.github.io/Xray-Evidence/install-mac-linux.sh | bash">Copy</button>
               </div>
               <pre><code>curl -fsSL \
   https://shikdershondhi.github.io/Xray-Evidence/install-mac-linux.sh \
@@ -1024,21 +1080,29 @@
 
             <div class="terminal" aria-label="Windows setup commands">
               <div class="terminal-top">
-                <span>Windows</span>
-                <span>PowerShell</span>
+                <span>Step 2 — Windows (PowerShell)</span>
+                <button class="copy-btn" type="button" data-copy="irm https://shikdershondhi.github.io/Xray-Evidence/install-windows.ps1 | iex">Copy</button>
               </div>
               <pre><code>irm https://shikdershondhi.github.io/Xray-Evidence/install-windows.ps1 | iex</code></pre>
             </div>
 
             <div class="terminal" aria-label="Manual clone setup commands">
               <div class="terminal-top">
-                <span>Manual (any OS)</span>
-                <span>git clone</span>
+                <span>Alternative — Manual (any OS)</span>
+                <button class="copy-btn" type="button" data-copy="git clone https://github.com/shikdershondhi/Xray-Evidence.git&#10;cd Xray-Evidence&#10;npm run setup&#10;npm run evidence:workflow">Copy</button>
               </div>
               <pre><code>git clone https://github.com/shikdershondhi/Xray-Evidence.git
 cd Xray-Evidence
 npm run setup
 npm run evidence:workflow</code></pre>
+            </div>
+
+            <div class="terminal" aria-label="Server start commands">
+              <div class="terminal-top">
+                <span>Step 3 — Start the server (macOS/Linux)</span>
+                <button class="copy-btn" type="button" data-copy="sh ~/xray-evidence-server/start-server.sh">Copy</button>
+              </div>
+              <pre><code>sh ~/xray-evidence-server/start-server.sh</code></pre>
             </div>
           </div>
         </section>
@@ -1076,6 +1140,28 @@ npm run evidence:workflow</code></pre>
         toggle.addEventListener("click", () => {
           const nextTheme = root.dataset.theme === "dark" ? "light" : "dark";
           applyTheme(nextTheme, true);
+        });
+
+        document.querySelectorAll(".copy-btn").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const text = (btn.dataset.copy || "").replace(/\\n/g, "\n");
+            try {
+              await navigator.clipboard.writeText(text);
+            } catch {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand("copy");
+              ta.remove();
+            }
+            btn.textContent = "Copied!";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = "Copy";
+              btn.classList.remove("copied");
+            }, 1600);
+          });
         });
       })();
     </script>
