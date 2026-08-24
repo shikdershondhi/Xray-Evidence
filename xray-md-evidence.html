@@ -2240,7 +2240,8 @@
         const IMAGE_STORE_NAME = "screenshots";
         const WORKFLOW_SERVICE_URL =
           localStorage.getItem(`${STORAGE_KEY}-workflow-url`) ||
-          (/^https?:$/.test(window.location.protocol)
+          (window.location.protocol === "http:" &&
+            /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
             ? window.location.origin
             : "http://127.0.0.1:39291");
         const SERVICE_NAME = "Xray Markdown Evidence Builder";
