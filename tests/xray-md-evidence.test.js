@@ -62,6 +62,17 @@ function testCaseFixture(overrides = {}) {
   };
 }
 
+async function stubWorkflowService(page) {
+  await page.route("http://127.0.0.1:39291/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/health") {
+      route.fulfill({ json: { status: "ready" } });
+      return;
+    }
+    route.fulfill({ json: {} });
+  });
+}
+
 async function seedWorkspace(page, workspace) {
   await page.addInitScript((payload) => {
     if (!localStorage.getItem("neustring-xray-md-evidence-builder-v1")) {
@@ -423,6 +434,7 @@ test("testcase Save pushes to Gist without confirmation", async () => {
 test("settings Push to Gist keeps the existing confirmation", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
   let gistPatchCount = 0;
 
   try {
@@ -471,6 +483,7 @@ test("settings Push to Gist keeps the existing confirmation", async () => {
 test("saved Gist settings do not start automatic sync on load or save", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
   let gistGetCount = 0;
 
   try {
@@ -672,6 +685,7 @@ test("workflow result marks failed local testcase uploaded when matching item up
 test("saving workflow settings refreshes visible values and marks workspace modified", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     const workspace = workspaceWithUploadedCases([
@@ -1530,6 +1544,7 @@ test("copy seperatly shows fallback guidance when multi-image clipboard write fa
 test("settings clear evidence files removes only uploaded Xray evidence from active workspace", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await seedWorkspace(page, {
@@ -1652,6 +1667,7 @@ test("settings clear evidence files removes only uploaded Xray evidence from act
 test("settings clear evidence files cancel keeps uploaded evidence files", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await seedWorkspace(
@@ -1692,6 +1708,7 @@ test("settings clear evidence files cancel keeps uploaded evidence files", async
 test("settings clear evidence files shows no-op toast when no uploaded evidence files match", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await seedWorkspace(
@@ -2074,6 +2091,7 @@ test("copy pic requires testcase evidence screenshots", async () => {
 test("standalone bug reporter opens empty without save and clears on close", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await page.goto(htmlUrl);
@@ -2143,6 +2161,7 @@ test("standalone bug reporter opens empty without save and clears on close", asy
 test("standalone copy info writes only manual bug report text", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await page.addInitScript(() => {
@@ -2195,6 +2214,7 @@ test("standalone copy info writes only manual bug report text", async () => {
 test("standalone copy pic merges pasted screenshots without text", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await page.addInitScript(() => {
@@ -2298,6 +2318,7 @@ test("standalone copy pic merges pasted screenshots without text", async () => {
 test("help icon opens the embedded user manual with setup guidance", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await page.goto(htmlUrl);

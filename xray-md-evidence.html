@@ -182,13 +182,45 @@
       .version-status-line {
         font-size: 12.5px;
         font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .version-status-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #9ca3af;
+        flex: 0 0 auto;
+      }
+
+      .version-status-line.ok .version-status-dot {
+        background: #1a7f37;
+      }
+
+      .version-status-line.warn .version-status-dot {
+        background: #d97706;
+      }
+
+      .version-status-line.err .version-status-dot {
+        background: #dc2626;
+      }
+
+      .version-status-refresh-btn {
+        font-size: 11px;
+        padding: 2px 8px;
+        cursor: pointer;
       }
 
       .version-status-line.ok {
         color: var(--ok, #1a7f37);
       }
 
-      .version-status-line.warn {
+      .version-status-line.warn,
+      .version-status-line.err {
         color: #b45309;
       }
 
@@ -1595,7 +1627,7 @@
           <h1>Xray Markdown Evidence Builder</h1>
           <span class="author-credit">Built by SHIKDER SHONDHI</span>
         </div>
-        <p id="versionStatusLine" class="sub version-status-line"></p>
+        <p id="versionStatusLine" class="sub version-status-line"><span class="version-status-dot"></span><span id="versionStatusText"></span><button type="button" id="versionStatusRefreshBtn" class="version-status-refresh-btn" title="Re-check local server connection and updates">Refresh</button></p>
         <p class="sub">
           Reusable project utility for loading Markdown or CSV test cases,
           pasting screenshots against each TC, saving evidence locally, and
@@ -2212,7 +2244,7 @@
             ? window.location.origin
             : "http://127.0.0.1:39291");
         const SERVICE_NAME = "Xray Markdown Evidence Builder";
-        const APP_VERSION = "1.0.1";
+        const APP_VERSION = "1.6.0";
         const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
         const state = loadState();
         const workflowState = {
@@ -2320,6 +2352,18 @@
             checkWorkflowService();
             scheduleUpdateCheck();
           });
+
+        $("versionStatusRefreshBtn").addEventListener("click", async () => {
+          const btn = $("versionStatusRefreshBtn");
+          btn.disabled = true;
+          btn.textContent = "Checking…";
+          try {
+            await checkWorkflowService();
+          } finally {
+            btn.disabled = false;
+            btn.textContent = "Refresh";
+          }
+        });
 
         $("updateBannerReloadBtn").addEventListener("click", () => {
           window.location.reload();
@@ -3907,31 +3951,32 @@
         function renderVersionStatus() {
           const line = $("versionStatusLine");
           if (!line) return;
+          const text = $("versionStatusText");
           const appLabel = `v${APP_VERSION}`;
-          line.classList.remove("ok", "warn");
+          line.classList.remove("ok", "warn", "err");
           if (!workflowState.serviceAvailable) {
-            line.textContent =
+            text.textContent =
               "App v" + APP_VERSION +
               " · Local server: not running — start it with sh ~/xray-evidence-server/start-server.sh (latest v" +
               APP_VERSION + ")";
-            line.classList.add("warn");
+            line.classList.add("err");
             return;
           }
           const serverVersion = workflowState.serverVersion;
           if (!serverVersion) {
-            line.textContent =
+            text.textContent =
               "Local server: running (version unknown, update recommended). Latest server version: v" +
               APP_VERSION;
             line.classList.add("warn");
             return;
           }
           if (serverVersion === APP_VERSION) {
-            line.textContent =
+            text.textContent =
               "Local server v" + serverVersion + " — up to date (app " + appLabel + ")";
             line.classList.add("ok");
             return;
           }
-          line.textContent =
+          text.textContent =
             "Local server v" + serverVersion +
             " — update needed. Latest server version: v" + APP_VERSION +
             ". Re-run the installer command to update.";
