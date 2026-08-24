@@ -814,14 +814,14 @@
               Jira Xray without a hosted data pipeline.
             </p>
             <div class="actions">
-              <a
-                class="button primary"
-                href="https://github.com/shikdershondhi/Xray-Evidence/releases/latest"
-              >
-                Download App
+              <a class="button primary" href="xray-md-evidence.html">
+                Open Evidence Builder
               </a>
-              <a class="button secondary" href="#setup">View Setup</a>
-              <a class="button subtle" href="https://github.com/shikdershondhi/Xray-Evidence">
+              <a class="button secondary" href="#setup">Run Setup in Terminal</a>
+              <a
+                class="button subtle"
+                href="https://github.com/shikdershondhi/Xray-Evidence"
+              >
                 Open GitHub
               </a>
             </div>
@@ -969,50 +969,77 @@
 
         <section id="setup" class="setup" aria-labelledby="setup-title">
           <div class="setup-copy">
-            <h2 id="setup-title">Fresh Copy Setup</h2>
+            <h2 id="setup-title">Run Setup in Terminal</h2>
             <p>
-              Start from a clean clone, install the local browser automation pieces,
-              verify the workstation, then open the evidence workflow.
+              The Evidence Builder runs in your browser from this site. The
+              workflow server (Playwright automation against Jira Xray) is
+              installed on your own PC. Pick your operating system and run the
+              one-line command in a terminal.
             </p>
             <div class="setup-list">
               <div class="setup-item">
                 <span class="step-num">1</span>
                 <div>
-                  <strong>Check Node.js</strong>
-                  <span>Install Node.js if <code>node -v</code> or <code>npm -v</code> does not work.</span>
+                  <strong>Install Node.js LTS</strong>
+                  <span>If <code>node -v</code> does not work, get it from <a href="https://nodejs.org" rel="noopener">nodejs.org</a>.</span>
                 </div>
               </div>
               <div class="setup-item">
                 <span class="step-num">2</span>
                 <div>
-                  <strong>Install app dependencies</strong>
-                  <span>Run setup once to install npm packages and Playwright Chromium.</span>
+                  <strong>Run the installer for your OS</strong>
+                  <span>Downloads the server into <code>~/xray-evidence-server</code>, installs dependencies and Playwright Chromium.</span>
                 </div>
               </div>
               <div class="setup-item">
                 <span class="step-num">3</span>
                 <div>
-                  <strong>Launch the workflow</strong>
-                  <span>Run doctor, then open the local evidence workflow server.</span>
+                  <strong>Start the server</strong>
+                  <span>Run <code>start-server</code> from the install folder, then open the Evidence Builder here and connect.</span>
                 </div>
               </div>
             </div>
+
+            <h3 style="margin:28px 0 12px;font-size:18px;">Start the server later</h3>
+            <p style="color:var(--muted);line-height:1.6;">
+              macOS/Linux:
+              <code>sh ~/xray-evidence-server/start-server.sh</code><br />
+              Windows: double-click
+              <code>%USERPROFILE%\xray-evidence-server\start-server.bat</code><br />
+              The web app talks to it at
+              <code>http://127.0.0.1:39291</code>.
+            </p>
           </div>
 
-          <div class="terminal" aria-label="Setup commands">
-            <div class="terminal-top">
-              <span>xray-evidence</span>
-              <span>local setup</span>
+          <div style="display:grid;gap:16px;align-content:start;">
+            <div class="terminal" aria-label="macOS and Linux setup commands">
+              <div class="terminal-top">
+                <span>macOS / Linux</span>
+                <span>terminal</span>
+              </div>
+              <pre><code>curl -fsSL \
+  https://shikdershondhi.github.io/Xray-Evidence/install-mac-linux.sh \
+  | bash</code></pre>
             </div>
-            <pre><code>git clone https://github.com/shikdershondhi/Xray-Evidence.git
+
+            <div class="terminal" aria-label="Windows setup commands">
+              <div class="terminal-top">
+                <span>Windows</span>
+                <span>PowerShell</span>
+              </div>
+              <pre><code>irm https://shikdershondhi.github.io/Xray-Evidence/install-windows.ps1 | iex</code></pre>
+            </div>
+
+            <div class="terminal" aria-label="Manual clone setup commands">
+              <div class="terminal-top">
+                <span>Manual (any OS)</span>
+                <span>git clone</span>
+              </div>
+              <pre><code>git clone https://github.com/shikdershondhi/Xray-Evidence.git
 cd Xray-Evidence
-
-node -v
-npm -v
-
 npm run setup
-npm run doctor
 npm run evidence:workflow</code></pre>
+            </div>
           </div>
         </section>
       </main>
@@ -1020,9 +1047,7 @@ npm run evidence:workflow</code></pre>
       <footer>
         <div class="shell footer-row">
           <span>Built by SHIKDER SHONDHI</span>
-          <a href="https://github.com/shikdershondhi/Xray-Evidence/releases/latest">
-            Download App
-          </a>
+          <a href="xray-md-evidence.html">Open Evidence Builder</a>
         </div>
       </footer>
     </div>

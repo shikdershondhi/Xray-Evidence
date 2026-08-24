@@ -31,6 +31,9 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/index.html
+          cp xray-md-evidence.html _site/xray-md-evidence.html
+          cp install-mac-linux.sh _site/install-mac-linux.sh
+          cp install-windows.ps1 _site/install-windows.ps1
           touch _site/.nojekyll
 
       - name: Upload Pages artifact
