@@ -1284,9 +1284,14 @@ async function refocusActualResultEditorAfterPaste(editor) {
 }
 
 async function dispatchImagePasteToEditor(editor, imageBuffer) {
-  const bytes = [...imageBuffer];
-  await editor.evaluate(async (element, pngBytes) => {
-    const blob = new Blob([new Uint8Array(pngBytes)], { type: "image/png" });
+  const pngBase64 = imageBuffer.toString("base64");
+  await editor.evaluate(async (element, base64) => {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    const blob = new Blob([bytes], { type: "image/png" });
     const file = new File([blob], "xray-evidence.png", { type: "image/png" });
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(file);
@@ -1296,18 +1301,23 @@ async function dispatchImagePasteToEditor(editor, imageBuffer) {
       clipboardData: dataTransfer,
     });
     element.dispatchEvent(event);
-  }, bytes);
+  }, pngBase64);
 }
 
 async function writeImageToPageClipboard(page, imageBuffer) {
-  const bytes = [...imageBuffer];
-  await page.evaluate(async (pngBytes) => {
+  const pngBase64 = imageBuffer.toString("base64");
+  await page.evaluate(async (base64) => {
     if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
       throw new Error("Browser clipboard image writing is unavailable.");
     }
-    const blob = new Blob([new Uint8Array(pngBytes)], { type: "image/png" });
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    const blob = new Blob([bytes], { type: "image/png" });
     await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-  }, bytes);
+  }, pngBase64);
 }
 
 async function firstVisibleLocator(page, selectors, timeoutMs) {
