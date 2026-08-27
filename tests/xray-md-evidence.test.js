@@ -582,6 +582,173 @@ test("saved Gist settings do not start automatic sync on load or save", async ()
   }
 });
 
+test("Push to Gist splits oversized payloads into chunked gist files", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let capturedBody = null;
+  const oversizedDataUrl = "data:image/png;base64," + "A".repeat(2000000);
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Upload evidence",
+          images: [
+            {
+              id: "img-1",
+              dataUrl: oversizedDataUrl,
+              note: "Large screenshot",
+              createdAt: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1-gist",
+        JSON.stringify({
+          username: "octocat",
+          token: "token-1",
+          gistId: "gist-1",
+        }),
+      );
+      window.confirm = () => true;
+    });
+    await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "PATCH") {
+        capturedBody = JSON.parse(route.request().postData());
+        await route.fulfill({ json: { id: "gist-1" } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="save-to-gist"][data-tc="TC-001"]')
+      .click();
+    await page
+      .locator(".toast", { hasText: "Pushed 1 workspace(s) to Gist" })
+      .waitFor();
+
+    assert.ok(capturedBody);
+    const files = capturedBody.files;
+    assert.equal(files["workspaces.json"], null);
+    assert.ok(files["workspaces.manifest.json"]);
+    const manifest = JSON.parse(files["workspaces.manifest.json"].content);
+    assert.ok(manifest.parts > 1);
+
+    let reassembled = "";
+    for (let i = 1; i <= manifest.parts; i++) {
+      const part = files[`workspaces.part${i}.json`];
+      assert.ok(part, `missing part ${i}`);
+      assert.ok(part.content.length <= 900000);
+      reassembled += part.content;
+    }
+
+    const parsed = JSON.parse(reassembled);
+    assert.equal(parsed.workspaces.length, 1);
+    assert.equal(
+      parsed.workspaces[0].testCases[0].images[0].dataUrl,
+      oversizedDataUrl,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("Sync from Gist reassembles workspaces from chunked gist files", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  await stubWorkflowService(page);
+
+  try {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1-gist",
+        JSON.stringify({
+          username: "octocat",
+          token: "token-1",
+          gistId: "gist-1",
+        }),
+      );
+    });
+
+    const remoteWorkspace = {
+      id: "ws-remote",
+      name: "Remote Workspace",
+      sourceName: "source.md",
+      sourceType: "markdown",
+      createdAt: "2026-05-20T00:00:00.000Z",
+      updatedAt: "2026-05-20T00:00:00.000Z",
+      testCases: [
+        {
+          id: "TC-100",
+          title: "Remote evidence",
+          summary: "",
+          relatedAc: "",
+          precondition: "",
+          steps: [],
+          expectedResult: "",
+          actualResult: "Synced from gist.",
+          status: "pass",
+          sourceLine: 1,
+          images: [
+            {
+              id: "img-remote-1",
+              dataUrl: onePixelPng,
+              note: "Remote screenshot",
+              createdAt: "2026-05-20T00:01:00.000Z",
+            },
+          ],
+        },
+      ],
+    };
+    const json = JSON.stringify({ workspaces: [remoteWorkspace] }, null, 2);
+    const chunkSize = 40; // small on purpose to force multiple parts here
+    const parts = [];
+    for (let i = 0; i < json.length; i += chunkSize) {
+      parts.push(json.slice(i, i + chunkSize));
+    }
+
+    await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        const files = {
+          "workspaces.manifest.json": {
+            content: JSON.stringify({ parts: parts.length }),
+          },
+        };
+        parts.forEach((part, index) => {
+          files[`workspaces.part${index + 1}.json`] = { content: part };
+        });
+        await route.fulfill({ json: { id: "gist-1", files } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.locator("#syncGistBtn").click();
+    await page
+      .locator(".toast", { hasText: "Synced workspaces from Gist" })
+      .waitFor();
+
+    const state = await readStoredState(page);
+    assert.equal(state.workspaces.length, 1);
+    assert.equal(state.workspaces[0].id, "ws-remote");
+    assert.equal(state.workspaces[0].testCases[0].id, "TC-100");
+    assert.deepEqual(await readStoredImageKeys(page), [
+      "ws-remote/TC-100/img-remote-1",
+    ]);
+  } finally {
+    await browser.close();
+  }
+});
+
 test("workflow result marks uploaded only after a successful matching result", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();

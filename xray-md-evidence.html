@@ -2075,7 +2075,9 @@
               <li>Use Sync from Gist on another browser to pull them back.</li>
               <li>
                 Gist sync stores the evidence JSON, including screenshot data
-                saved in the workspace.
+                saved in the workspace. Large evidence sets are split across
+                multiple files in the gist automatically to stay under
+                GitHub's per-file size limit.
               </li>
             </ol>
           </section>
@@ -2397,7 +2399,7 @@
             ? window.location.origin
             : "http://127.0.0.1:39291");
         const SERVICE_NAME = "Xray Markdown Evidence Builder";
-        const APP_VERSION = "1.6.0";
+        const APP_VERSION = "1.6.1";
         const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
         const state = loadState();
         const activeTcFilters = new Set();
@@ -5717,6 +5719,12 @@
         }
 
         // GitHub Gist settings and sync helpers
+        // GitHub rejects a single gist file's content once it's roughly
+        // above 1MB ("contents are too large and cannot be saved"), so
+        // large exports are split into workspaces.part1.json..partN.json
+        // plus a workspaces.manifest.json describing the part count.
+        const GIST_CHUNK_CHAR_LIMIT = 900000;
+
         function loadGistSettings() {
           try {
             const saved = JSON.parse(
@@ -5901,8 +5909,8 @@
             }
 
             const gistData = await resp.json();
-            const wsFile = gistData.files["workspaces.json"];
-            if (!wsFile) {
+            const fileText = await loadGistWorkspacesText(gistData);
+            if (fileText === null) {
               if (!silent)
                 toast(
                   "Gist does not contain workspaces.json file. Create one first.",
@@ -5910,7 +5918,6 @@
               return;
             }
 
-            const fileText = await loadGistFileContent(wsFile);
             const content = JSON.parse(fileText);
             const remoteWorkspaces = Array.isArray(content.workspaces)
               ? content.workspaces
@@ -5959,6 +5966,34 @@
           return rawResp.text();
         }
 
+        // Reads the exported workspaces JSON text from a gist, transparently
+        // reassembling it from chunked workspaces.partN.json files when the
+        // gist has a workspaces.manifest.json (see GIST_CHUNK_CHAR_LIMIT).
+        // Returns null if the gist has neither layout.
+        async function loadGistWorkspacesText(gistData) {
+          const manifestFile = gistData.files["workspaces.manifest.json"];
+          if (manifestFile) {
+            const manifestText = await loadGistFileContent(manifestFile);
+            const manifest = JSON.parse(manifestText);
+            const parts = Number(manifest.parts) || 0;
+            let text = "";
+            for (let i = 1; i <= parts; i++) {
+              const partFile = gistData.files[`workspaces.part${i}.json`];
+              if (!partFile) {
+                throw new Error(
+                  `Gist manifest expects ${parts} part(s) but workspaces.part${i}.json is missing.`,
+                );
+              }
+              text += await loadGistFileContent(partFile);
+            }
+            return text;
+          }
+
+          const wsFile = gistData.files["workspaces.json"];
+          if (!wsFile) return null;
+          return loadGistFileContent(wsFile);
+        }
+
         async function pushToGist(options = {}) {
           const confirmBeforePush = options.confirmBeforePush !== false;
           const gistId = (els.gistId?.value || "").trim();
@@ -5991,19 +6026,33 @@
             const fileContent = {
               workspaces: await hydrateWorkspacesForExport(state.workspaces),
             };
+            const json = JSON.stringify(fileContent, null, 2);
+
+            let files;
+            if (json.length <= GIST_CHUNK_CHAR_LIMIT) {
+              files = { "workspaces.json": { content: json } };
+            } else {
+              const parts = [];
+              for (let i = 0; i < json.length; i += GIST_CHUNK_CHAR_LIMIT) {
+                parts.push(json.slice(i, i + GIST_CHUNK_CHAR_LIMIT));
+              }
+              files = {
+                "workspaces.json": null,
+                "workspaces.manifest.json": {
+                  content: JSON.stringify({ parts: parts.length }),
+                },
+              };
+              parts.forEach((part, index) => {
+                files[`workspaces.part${index + 1}.json`] = { content: part };
+              });
+            }
 
             const patchResp = await fetch(
               `https://api.github.com/gists/${gistId}`,
               {
                 method: "PATCH",
                 headers: gistAuthHeaders(),
-                body: JSON.stringify({
-                  files: {
-                    "workspaces.json": {
-                      content: JSON.stringify(fileContent, null, 2),
-                    },
-                  },
-                }),
+                body: JSON.stringify({ files }),
               },
             );
 
