@@ -444,6 +444,10 @@ test("testcase Save pushes to Gist without confirmation", async () => {
       };
     });
     await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({ json: { id: "gist-1", files: {} } });
+        return;
+      }
       if (route.request().method() === "PATCH") {
         gistPatchCount += 1;
         await route.fulfill({ json: { id: "gist-1" } });
@@ -505,6 +509,10 @@ test("settings Push to Gist keeps the existing confirmation", async () => {
       };
     });
     await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({ json: { id: "gist-1", files: {} } });
+        return;
+      }
       if (route.request().method() === "PATCH") {
         gistPatchCount += 1;
         await route.fulfill({ json: { id: "gist-1" } });
@@ -618,6 +626,17 @@ test("Push to Gist splits oversized payloads into chunked gist files", async () 
       window.confirm = () => true;
     });
     await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          json: {
+            id: "gist-1",
+            files: {
+              "workspaces.json": { content: JSON.stringify({ workspaces: [] }) },
+            },
+          },
+        });
+        return;
+      }
       if (route.request().method() === "PATCH") {
         capturedBody = JSON.parse(route.request().postData());
         await route.fulfill({ json: { id: "gist-1" } });
@@ -655,6 +674,155 @@ test("Push to Gist splits oversized payloads into chunked gist files", async () 
       parsed.workspaces[0].testCases[0].images[0].dataUrl,
       oversizedDataUrl,
     );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("Push to Gist cleans up stale part files left over from a larger previous push", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let capturedBody = null;
+  const oversizedDataUrl = "data:image/png;base64," + "A".repeat(2000000);
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Upload evidence",
+          images: [
+            {
+              id: "img-1",
+              dataUrl: oversizedDataUrl,
+              note: "Large screenshot",
+              createdAt: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1-gist",
+        JSON.stringify({
+          username: "octocat",
+          token: "token-1",
+          gistId: "gist-1",
+        }),
+      );
+      window.confirm = () => true;
+    });
+    await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        const files = {
+          "workspaces.manifest.json": {
+            content: JSON.stringify({ parts: 5 }),
+          },
+        };
+        for (let i = 1; i <= 5; i++) {
+          files[`workspaces.part${i}.json`] = { content: "stale-part-data" };
+        }
+        await route.fulfill({ json: { id: "gist-1", files } });
+        return;
+      }
+      if (route.request().method() === "PATCH") {
+        capturedBody = JSON.parse(route.request().postData());
+        await route.fulfill({ json: { id: "gist-1" } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="save-to-gist"][data-tc="TC-001"]')
+      .click();
+    await page
+      .locator(".toast", { hasText: "Pushed 1 workspace(s) to Gist" })
+      .waitFor();
+
+    assert.ok(capturedBody);
+    const files = capturedBody.files;
+    const manifest = JSON.parse(files["workspaces.manifest.json"].content);
+    assert.ok(manifest.parts < 5, "expected fewer parts than the stale gist had");
+    assert.equal(files["workspaces.json"], undefined);
+    for (let i = 1; i <= manifest.parts; i++) {
+      assert.ok(files[`workspaces.part${i}.json`]?.content, `missing part ${i}`);
+    }
+    for (let i = manifest.parts + 1; i <= 5; i++) {
+      assert.equal(
+        files[`workspaces.part${i}.json`],
+        null,
+        `stale part ${i} should be nulled out`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+test("Push to Gist sends no delete entries when the gist has no existing files", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let capturedBody = null;
+  const oversizedDataUrl = "data:image/png;base64," + "A".repeat(2000000);
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Upload evidence",
+          images: [
+            {
+              id: "img-1",
+              dataUrl: oversizedDataUrl,
+              note: "Large screenshot",
+              createdAt: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1-gist",
+        JSON.stringify({
+          username: "octocat",
+          token: "token-1",
+          gistId: "gist-1",
+        }),
+      );
+      window.confirm = () => true;
+    });
+    await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({ json: { id: "gist-1", files: {} } });
+        return;
+      }
+      if (route.request().method() === "PATCH") {
+        capturedBody = JSON.parse(route.request().postData());
+        await route.fulfill({ json: { id: "gist-1" } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="save-to-gist"][data-tc="TC-001"]')
+      .click();
+    await page
+      .locator(".toast", { hasText: "Pushed 1 workspace(s) to Gist" })
+      .waitFor();
+
+    assert.ok(capturedBody);
+    const files = capturedBody.files;
+    const nullEntries = Object.values(files).filter((value) => value === null);
+    assert.equal(nullEntries.length, 0, "should not send any delete entries");
   } finally {
     await browser.close();
   }

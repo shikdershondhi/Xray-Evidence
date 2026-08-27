@@ -2399,7 +2399,7 @@
             ? window.location.origin
             : "http://127.0.0.1:39291");
         const SERVICE_NAME = "Xray Markdown Evidence Builder";
-        const APP_VERSION = "1.6.1";
+        const APP_VERSION = "1.6.2";
         const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
         const state = loadState();
         const activeTcFilters = new Set();
@@ -6023,13 +6023,29 @@
           }
 
           try {
+            const getResp = await fetch(
+              `https://api.github.com/gists/${gistId}`,
+              { headers: gistAuthHeaders() },
+            );
+            if (!getResp.ok) {
+              throw new Error(
+                `Failed to fetch gist: ${getResp.status} ${getResp.statusText}`,
+              );
+            }
+            const currentGistData = await getResp.json();
+            const existingFilenames = new Set(
+              Object.keys(currentGistData.files || {}),
+            );
+
             const fileContent = {
               workspaces: await hydrateWorkspacesForExport(state.workspaces),
             };
-            const json = JSON.stringify(fileContent, null, 2);
+            const json = JSON.stringify(fileContent);
 
             let files;
+            const targetFilenames = new Set();
             if (json.length <= GIST_CHUNK_CHAR_LIMIT) {
+              targetFilenames.add("workspaces.json");
               files = { "workspaces.json": { content: json } };
             } else {
               const parts = [];
@@ -6037,14 +6053,33 @@
                 parts.push(json.slice(i, i + GIST_CHUNK_CHAR_LIMIT));
               }
               files = {
-                "workspaces.json": null,
                 "workspaces.manifest.json": {
                   content: JSON.stringify({ parts: parts.length }),
                 },
               };
+              targetFilenames.add("workspaces.manifest.json");
               parts.forEach((part, index) => {
-                files[`workspaces.part${index + 1}.json`] = { content: part };
+                const filename = `workspaces.part${index + 1}.json`;
+                files[filename] = { content: part };
+                targetFilenames.add(filename);
               });
+            }
+
+            // Only delete gist files that currently exist, belong to this
+            // tool's own workspaces.* naming scheme, and are no longer part
+            // of this push's layout (e.g. the old single workspaces.json
+            // when switching to chunked, or stale workspaces.partN.json
+            // files left over from a previous push that needed more parts).
+            // Leave any other files in the gist untouched.
+            const WORKSPACES_FILENAME_RE =
+              /^workspaces(\.manifest|\.part\d+)?\.json$/;
+            for (const filename of existingFilenames) {
+              if (
+                WORKSPACES_FILENAME_RE.test(filename) &&
+                !targetFilenames.has(filename)
+              ) {
+                files[filename] = null;
+              }
             }
 
             const patchResp = await fetch(
