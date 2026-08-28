@@ -1966,6 +1966,11 @@
                 <strong>Service unavailable:</strong> make sure the server
                 terminal is running and no firewall blocks port 39291.
               </li>
+              <li>
+                <strong>Kill server:</strong> if the server hangs or you need
+                to stop it forcefully, run
+                <code>kill -9 $(lsof -t -i:39291)</code> in a terminal.
+              </li>
               <li><strong>Uninstall:</strong> delete the <code>~/xray-evidence-server</code> folder.</li>
             </ul>
           </section>
@@ -2639,9 +2644,7 @@
               showError(new Error("Clipboard copy was blocked by the browser."));
             }
           });
-          els.bugReportDialog.addEventListener("click", (event) => {
-            if (event.target === els.bugReportDialog) closeBugReportDialog();
-          });
+
           els.bugReportCancelBtn.addEventListener("click", closeBugReportDialog);
           els.bugReportSaveBtn.addEventListener("click", saveBugReportFromUi);
           els.bugReportCopyBtn.addEventListener("click", () =>
