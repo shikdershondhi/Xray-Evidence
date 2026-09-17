@@ -1578,6 +1578,51 @@
         display: none !important;
       }
 
+      .image-card img {
+        cursor: zoom-in;
+      }
+
+      .lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 95;
+        display: grid;
+        place-items: center;
+        background: rgba(15, 23, 42, 0.85);
+        padding: 20px;
+        cursor: zoom-out;
+      }
+
+      .lightbox img {
+        max-width: 95vw;
+        max-height: 90vh;
+        border-radius: var(--radius);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+        cursor: default;
+        object-fit: contain;
+      }
+
+      .lightbox-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: rgba(255, 255, 255, 0.15);
+        border: none;
+        border-radius: 999px;
+        color: #fff;
+        font-size: 20px;
+        width: 36px;
+        height: 36px;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        transition: background 0.15s;
+      }
+
+      .lightbox-close:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+
       .toast {
         position: fixed;
         right: 18px;
@@ -2179,6 +2224,11 @@
       </div>
     </div>
 
+    <div id="imageLightbox" class="lightbox hidden" role="dialog" aria-label="Zoomed image">
+      <button id="lightboxCloseBtn" class="lightbox-close" type="button" aria-label="Close">&times;</button>
+      <img id="lightboxImg" src="" alt="Zoomed evidence screenshot">
+    </div>
+
     <div id="pdfExportView" class="pdf-export-view" hidden></div>
 
     <div
@@ -2497,6 +2547,9 @@
           pushGistBtn: $("pushGistBtn"),
           workflowSummarySetting: $("workflowSummarySetting"),
           saveWorkflowSettingsBtn: $("saveWorkflowSettingsBtn"),
+          imageLightbox: $("imageLightbox"),
+          lightboxCloseBtn: $("lightboxCloseBtn"),
+          lightboxImg: $("lightboxImg"),
         };
 
         const STANDALONE_BUG_REPORT_WORKSPACE_ID = "standalone-bug-reporter";
@@ -2630,6 +2683,13 @@
           els.helpDialog.addEventListener("click", (event) => {
             if (event.target === els.helpDialog) closeHelpDialog();
           });
+          els.imageLightbox.addEventListener("click", (event) => {
+            if (event.target !== els.lightboxImg) closeLightbox();
+          });
+          els.lightboxCloseBtn.addEventListener("click", closeLightbox);
+          els.bugReportDialog.addEventListener("click", (event) => {
+            if (event.target === els.bugReportDialog) closeBugReportDialog();
+          });
           document.addEventListener("click", async (event) => {
             const btn = event.target.closest?.("[data-copy]");
             if (!btn) return;
@@ -2691,6 +2751,7 @@
           );
           document.addEventListener("keydown", (event) => {
             if (event.key === "Escape") {
+              closeLightbox();
               closeHelpDialog();
               closeBugReportDialog();
               closeSettingsDrawer();
@@ -2764,6 +2825,19 @@
           els.helpDialog.classList.add("hidden");
           els.helpDialog.setAttribute("aria-hidden", "true");
           els.helpToggleBtn.focus();
+        }
+
+        function openLightbox(src, alt) {
+          els.lightboxImg.src = src;
+          els.lightboxImg.alt = alt || "Zoomed evidence screenshot";
+          els.imageLightbox.classList.remove("hidden");
+          document.body.style.overflow = "hidden";
+        }
+
+        function closeLightbox() {
+          els.imageLightbox.classList.add("hidden");
+          els.lightboxImg.src = "";
+          document.body.style.overflow = "";
         }
 
         function openBugReportDialog(tcId) {
@@ -2983,6 +3057,11 @@
         }
 
         async function handleStandaloneBugReportImageClick(event) {
+          const img = event.target.closest(".image-card img");
+          if (img && img.src) {
+            openLightbox(img.src, img.alt);
+            return;
+          }
           const button = event.target.closest("button[data-action]");
           if (!button) return;
           const index = Number(button.dataset.index);
@@ -3738,6 +3817,14 @@
             .querySelectorAll("button[data-action]")
             .forEach((button) => {
               button.addEventListener("click", () => handleCardAction(button));
+            });
+
+          els.cards
+            .querySelectorAll(".image-card img")
+            .forEach((img) => {
+              img.addEventListener("click", () => {
+                if (img.src) openLightbox(img.src, img.alt);
+              });
             });
 
           els.cards
