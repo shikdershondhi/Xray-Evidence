@@ -12,13 +12,23 @@ const pagesWorkflowPath = path.resolve(
   "pages.yml",
 );
 
-test("landing page keeps the release download CTA and author footer", () => {
+test("landing page keeps the open-app CTA, installer links, and author footer", () => {
+  assert.match(indexHtml, /href="xray-md-evidence\.html"/);
+  assert.match(indexHtml, />\s*Open Evidence Builder\s*</);
   assert.match(
     indexHtml,
-    /href="https:\/\/github\.com\/shikdershondhi\/Xray-Evidence\/releases\/latest"/,
+    /install-mac-linux\.sh/,
   );
-  assert.match(indexHtml, />\s*Download App\s*</);
+  assert.match(indexHtml, /install-windows\.ps1/);
   assert.match(indexHtml, /Built by SHIKDER SHONDHI/);
+});
+
+test("landing page manual has copy buttons for every install command", () => {
+  const copyButtons = indexHtml.match(/class="copy-btn"/g) || [];
+  assert.ok(copyButtons.length >= 4, "expected at least four copy buttons");
+  assert.match(indexHtml, /data-copy="curl -fsSL [^"]+install-mac-linux\.sh \| bash"/);
+  assert.match(indexHtml, /data-copy="irm [^"]+install-windows\.ps1 \| iex"/);
+  assert.match(indexHtml, /navigator\.clipboard\.writeText/);
 });
 
 test("landing page includes persistent system-aware theme controls", () => {
@@ -36,12 +46,12 @@ test("landing page advertises the expected developer-tool feature surface", () =
     "Local Playwright",
     "Local-only data",
     "Gist sync",
-    "Fresh-copy setup",
+    "User Manual",
     "Uploaded evidence cleanup",
     "clear saved screenshot files",
     "npm run setup",
-    "npm run doctor",
     "npm run evidence:workflow",
+    "127.0.0.1:39291",
   ]) {
     assert.match(indexHtml, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
   }
@@ -65,4 +75,7 @@ test("GitHub Pages workflow deploys the static landing page artifact", () => {
   assert.match(workflow, /uses: actions\/deploy-pages@v4/);
   assert.match(workflow, /path: _site/);
   assert.match(workflow, /Copy landing page/);
+  assert.match(workflow, /cp xray-md-evidence\.html _site\/xray-md-evidence\.html/);
+  assert.match(workflow, /cp install-mac-linux\.sh _site\/install-mac-linux\.sh/);
+  assert.match(workflow, /cp install-windows\.ps1 _site\/install-windows\.ps1/);
 });

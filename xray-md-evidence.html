@@ -108,6 +108,33 @@
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       }
 
+      .update-banner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 18px;
+        background: #b45309;
+        color: #fff8ec;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .update-banner[hidden] {
+        display: none;
+      }
+
+      .update-banner-actions {
+        display: inline-flex;
+        gap: 8px;
+        white-space: nowrap;
+      }
+
       header {
         position: sticky;
         top: 0;
@@ -152,6 +179,51 @@
         line-height: 1.45;
       }
 
+      .version-status-line {
+        font-size: 12.5px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .version-status-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #9ca3af;
+        flex: 0 0 auto;
+      }
+
+      .version-status-line.ok .version-status-dot {
+        background: #1a7f37;
+      }
+
+      .version-status-line.warn .version-status-dot {
+        background: #d97706;
+      }
+
+      .version-status-line.err .version-status-dot {
+        background: #dc2626;
+      }
+
+      .version-status-refresh-btn {
+        font-size: 11px;
+        padding: 2px 8px;
+        cursor: pointer;
+      }
+
+      .version-status-line.ok {
+        color: var(--ok, #1a7f37);
+      }
+
+      .version-status-line.warn,
+      .version-status-line.err {
+        color: #b45309;
+      }
+
       .blue-link {
         color: var(--blue);
       }
@@ -193,6 +265,118 @@
         text-align: center;
         white-space: nowrap;
         flex: none;
+      }
+
+      .tc-filter {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .tc-filter-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 40px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--field-bg);
+        color: var(--ink);
+        padding: 9px 11px;
+        font-size: 14px;
+        font-weight: 400;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+
+      .tc-filter-btn:hover {
+        background: var(--field-bg);
+        border-color: var(--blue);
+      }
+
+      .tc-filter-btn .tc-filter-caret {
+        flex: none;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .tc-filter-btn.active {
+        border-color: var(--blue);
+        color: var(--blue);
+        font-weight: 650;
+      }
+
+      .tc-filter-menu[hidden] {
+        display: none;
+      }
+
+      .tc-filter-menu {
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        min-width: 230px;
+        background: var(--panel-bg, var(--field-bg));
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+        padding: 6px;
+        z-index: 60;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .tc-filter-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 400;
+        white-space: nowrap;
+      }
+
+      .tc-filter-option:hover {
+        background: var(--field-muted-bg);
+      }
+
+      .tc-filter-option input[type="checkbox"] {
+        min-height: 0;
+        width: 16px;
+        height: 16px;
+        accent-color: var(--blue);
+        cursor: pointer;
+      }
+
+      .tc-filter-count {
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+        flex: none;
+      }
+
+      .tc-filter-clear {
+        flex: none;
+        min-height: 40px;
+        min-width: 40px;
+        padding: 9px 12px;
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        color: #dc2626;
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      .tc-filter-clear:hover {
+        background: rgba(220, 38, 38, 0.1);
+        border-color: #dc2626;
       }
 
       input,
@@ -766,6 +950,20 @@
         border-radius: 3px;
         background: var(--hover-panel);
         padding: 2px 4px;
+      }
+
+      .help-cmd-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 8px 0;
+      }
+
+      .help-cmd {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        font-size: 12px;
       }
 
       .bug-report-panel {
@@ -1564,12 +1762,29 @@
     </style>
   </head>
   <body>
+    <div id="updateBanner" class="update-banner" hidden>
+      <span id="updateBannerText"></span>
+      <span class="update-banner-actions">
+        <button id="updateBannerReloadBtn" class="ghost small" type="button">
+          Reload app
+        </button>
+        <button
+          id="updateBannerDismissBtn"
+          class="ghost small"
+          type="button"
+          aria-label="Dismiss update notification"
+        >
+          Dismiss
+        </button>
+      </span>
+    </div>
     <header>
       <div class="topbar">
         <div class="title-row">
           <h1>Xray Markdown Evidence Builder</h1>
           <span class="author-credit">Built by SHIKDER SHONDHI</span>
         </div>
+        <p id="versionStatusLine" class="sub version-status-line"><span class="version-status-dot"></span><span id="versionStatusText"></span><button type="button" id="versionStatusRefreshBtn" class="version-status-refresh-btn" title="Re-check local server connection and updates">Refresh</button></p>
         <p class="sub">
           Reusable project utility for loading Markdown or CSV test cases,
           pasting screenshots against each TC, saving evidence locally, and
@@ -1606,13 +1821,51 @@
               &#8595;
             </button>
           </div>
-          <select id="evidenceFilter" aria-label="Filter test cases by evidence">
-            <option value="all">All TCs</option>
-            <option value="with">With Evidence</option>
-            <option value="without">Without Evidence</option>
-            <option value="uploaded">Uploaded in Xray</option>
-            <option value="not-uploaded">Not Uploaded in Xray</option>
-          </select>
+          <div class="tc-filter">
+            <button
+              type="button"
+              id="evidenceFilterBtn"
+              class="tc-filter-btn"
+              aria-haspopup="true"
+              aria-expanded="false"
+              title="Filter test cases"
+            >
+              <span id="evidenceFilterLabel">All TCs</span>
+              <span class="tc-filter-caret">&#9662;</span>
+            </button>
+            <div id="evidenceFilterMenu" class="tc-filter-menu" hidden>
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="with" /> With Evidence</label
+              >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="without" /> Without Evidence</label
+              >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="uploaded" /> Uploaded in Xray</label
+              >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="not-uploaded" /> Not Uploaded in
+                Xray</label
+              >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="pass" /> Status: Pass</label
+              >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="fail" /> Status: Fail</label
+              >
+            </div>
+            <span id="tcFilterCount" class="tc-filter-count"></span>
+            <button
+              type="button"
+              id="clearFiltersBtn"
+              class="tc-filter-clear"
+              title="Clear filters"
+              aria-label="Clear filters"
+              hidden
+            >
+              &#10005;
+            </button>
+          </div>
         </div>
       </div>
       <button
@@ -1695,6 +1948,76 @@
               If this page was opened directly as a file, run the commands above
               from the repo terminal.
             </p>
+          </section>
+          <section class="help-section">
+            <h3>Web App &amp; Local Server Install</h3>
+            <p>
+              When you open this page from the website
+              (shikdershondhi.github.io), the UI runs in your browser from any
+              device, and the workflow server runs on your own PC. Install it
+              once from a terminal.
+            </p>
+            <ol>
+              <li>
+                Install Node.js LTS if <code>node -v</code> does not work
+                (<a href="https://nodejs.org" rel="noopener" target="_blank">nodejs.org</a>).
+              </li>
+              <li>Copy the installer command for your OS and run it:</li>
+            </ol>
+            <div class="help-cmd-row">
+              <code class="help-cmd">curl -fsSL https://shikdershondhi.github.io/Xray-Evidence/install-mac-linux.sh | bash</code>
+              <button class="ghost small" type="button" data-copy="curl -fsSL https://shikdershondhi.github.io/Xray-Evidence/install-mac-linux.sh | bash">Copy</button>
+            </div>
+            <div class="help-cmd-row">
+              <code class="help-cmd">irm https://shikdershondhi.github.io/Xray-Evidence/install-windows.ps1 | iex</code>
+              <button class="ghost small" type="button" data-copy="irm https://shikdershondhi.github.io/Xray-Evidence/install-windows.ps1 | iex">Copy</button>
+            </div>
+            <p>
+              The installer downloads the server into
+              <code>~/xray-evidence-server</code>, installs npm dependencies and
+              Playwright Chromium (a few minutes).
+            </p>
+            <ol start="3">
+              <li>Start the server whenever you need automation:</li>
+            </ol>
+            <div class="help-cmd-row">
+              <code class="help-cmd">sh ~/xray-evidence-server/start-server.sh</code>
+              <button class="ghost small" type="button" data-copy="sh ~/xray-evidence-server/start-server.sh">Copy</button>
+            </div>
+            <p>
+              Windows: double-click
+              <code>%USERPROFILE%\xray-evidence-server\start-server.bat</code>.
+            </p>
+            <ol start="4">
+              <li>
+                Open this page from the website. It talks to your local server
+                at <code>http://127.0.0.1:39291</code>. The first workflow run
+                opens a browser window where you log in to Jira manually within
+                3 minutes; the session is then reused.
+              </li>
+            </ol>
+            <ul>
+              <li>
+                <strong>Update:</strong> re-run the installer command — it
+                replaces the folder with the latest version.
+              </li>
+              <li>
+                <strong>Different port:</strong> start with
+                <code>XRAY_WORKFLOW_PORT=&lt;port&gt;</code>, then set localStorage key
+                <code>neustring-xray-md-evidence-builder-v1-workflow-url</code> to
+                <code>http://127.0.0.1:&lt;port&gt;</code>.
+              </li>
+              <li>
+                <strong>Service unavailable:</strong> make sure the server
+                terminal is running and no firewall blocks port 39291.
+              </li>
+              <li>
+                <strong>Kill server:</strong> if the server hangs or you need
+                to stop it forcefully, run
+                <code>kill -9 $(lsof -t -i:39291)</code> in a terminal.
+              </li>
+              <li><strong>Uninstall:</strong> delete the <code>~/xray-evidence-server</code> folder.</li>
+            </ul>
           </section>
           <section class="help-section">
             <h3>Daily Workflow</h3>
@@ -1802,7 +2125,9 @@
               <li>Use Sync from Gist on another browser to pull them back.</li>
               <li>
                 Gist sync stores the evidence JSON, including screenshot data
-                saved in the workspace.
+                saved in the workspace. Large evidence sets are split across
+                multiple files in the gist automatically to stay under
+                GitHub's per-file size limit.
               </li>
             </ol>
           </section>
@@ -1830,9 +2155,11 @@
           <section class="help-section">
             <h3>Filtering Test Cases</h3>
             <p>
-              Use the evidence filter beside search to show all test cases,
-              only test cases with saved screenshots, or only test cases still
-              missing screenshots.
+              Use the filter beside search to combine multiple options —
+              evidence (with/without), Xray upload state (uploaded/not
+              uploaded), and status (Pass/Fail). The count next to the filter
+              shows how many test cases match, and the ✕ button clears all
+              active filters.
             </p>
           </section>
         </div>
@@ -2120,15 +2447,22 @@
         const WORKFLOW_STORAGE_KEY = `${STORAGE_KEY}-workflow`;
         const IMAGE_DB_NAME = `${STORAGE_KEY}-images`;
         const IMAGE_STORE_NAME = "screenshots";
-        const WORKFLOW_SERVICE_URL = /^https?:$/.test(window.location.protocol)
-          ? window.location.origin
-          : "http://127.0.0.1:39291";
+        const WORKFLOW_SERVICE_URL =
+          localStorage.getItem(`${STORAGE_KEY}-workflow-url`) ||
+          (window.location.protocol === "http:" &&
+            /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
+            ? window.location.origin
+            : "http://127.0.0.1:39291");
         const SERVICE_NAME = "Xray Markdown Evidence Builder";
+        const APP_VERSION = "1.6.2";
+        const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
         const state = loadState();
+        const activeTcFilters = new Set();
         const workflowState = {
           summary: "",
           browserMode: "headless",
           serviceAvailable: false,
+          serverVersion: "",
           queueActive: false,
           queueCancelRequested: false,
           queueTotal: 0,
@@ -2148,7 +2482,11 @@
           tcPrevBtn: $("tcPrevBtn"),
           tcNavCount: $("tcNavCount"),
           tcNextBtn: $("tcNextBtn"),
-          evidenceFilter: $("evidenceFilter"),
+          evidenceFilterBtn: $("evidenceFilterBtn"),
+          evidenceFilterMenu: $("evidenceFilterMenu"),
+          evidenceFilterLabel: $("evidenceFilterLabel"),
+          tcFilterCount: $("tcFilterCount"),
+          clearFiltersBtn: $("clearFiltersBtn"),
           newProjectBtn: $("newProjectBtn"),
           exportBtn: $("exportBtn"),
           importBtn: $("importBtn"),
@@ -2230,7 +2568,32 @@
           .finally(() => {
             render();
             checkWorkflowService();
+            scheduleUpdateCheck();
           });
+
+        $("versionStatusRefreshBtn").addEventListener("click", async () => {
+          const btn = $("versionStatusRefreshBtn");
+          btn.disabled = true;
+          btn.textContent = "Checking…";
+          try {
+            await checkWorkflowService();
+          } finally {
+            btn.disabled = false;
+            btn.textContent = "Refresh";
+          }
+        });
+
+        $("updateBannerReloadBtn").addEventListener("click", () => {
+          window.location.reload();
+        });
+        $("updateBannerDismissBtn").addEventListener("click", () => {
+          const banner = $("updateBanner");
+          localStorage.setItem(
+            `${STORAGE_KEY}-update-dismissed`,
+            $("updateBannerText").textContent,
+          );
+          banner.hidden = true;
+        });
 
         function bindGlobalEvents() {
           els.fileInput.addEventListener("change", handleSourceFile);
@@ -2246,7 +2609,35 @@
           });
           els.tcPrevBtn.addEventListener("click", () => navigateTc(-1));
           els.tcNextBtn.addEventListener("click", () => navigateTc(1));
-          els.evidenceFilter.addEventListener("change", () => {
+          els.evidenceFilterBtn.addEventListener("click", () => {
+            const menu = els.evidenceFilterMenu;
+            menu.hidden = !menu.hidden;
+            els.evidenceFilterBtn.setAttribute(
+              "aria-expanded",
+              menu.hidden ? "false" : "true",
+            );
+          });
+          document.addEventListener("click", (event) => {
+            if (
+              !els.evidenceFilterMenu.hidden &&
+              !event.target.closest(".tc-filter")
+            ) {
+              els.evidenceFilterMenu.hidden = true;
+              els.evidenceFilterBtn.setAttribute("aria-expanded", "false");
+            }
+          });
+          els.evidenceFilterMenu.addEventListener("change", () => {
+            syncTcFiltersFromMenu();
+            tcNavIndex = -1;
+            render();
+          });
+          els.clearFiltersBtn.addEventListener("click", () => {
+            els.evidenceFilterMenu
+              .querySelectorAll('input[type="checkbox"]')
+              .forEach((input) => {
+                input.checked = false;
+              });
+            syncTcFiltersFromMenu();
             tcNavIndex = -1;
             render();
           });
@@ -2299,6 +2690,21 @@
           els.bugReportDialog.addEventListener("click", (event) => {
             if (event.target === els.bugReportDialog) closeBugReportDialog();
           });
+          document.addEventListener("click", async (event) => {
+            const btn = event.target.closest?.("[data-copy]");
+            if (!btn) return;
+            try {
+              await navigator.clipboard.writeText(btn.dataset.copy || "");
+              const original = btn.textContent;
+              btn.textContent = "Copied!";
+              setTimeout(() => {
+                btn.textContent = original;
+              }, 1600);
+            } catch {
+              showError(new Error("Clipboard copy was blocked by the browser."));
+            }
+          });
+
           els.bugReportCancelBtn.addEventListener("click", closeBugReportDialog);
           els.bugReportSaveBtn.addEventListener("click", saveBugReportFromUi);
           els.bugReportCopyBtn.addEventListener("click", () =>
@@ -3140,17 +3546,52 @@
             });
         }
 
+        function syncTcFiltersFromMenu() {
+          activeTcFilters.clear();
+          els.evidenceFilterMenu
+            .querySelectorAll('input[type="checkbox"]:checked')
+            .forEach((input) => activeTcFilters.add(input.value));
+          updateTcFilterUi();
+        }
+
+        function updateTcFilterUi() {
+          const labels = {
+            with: "With Evidence",
+            without: "Without Evidence",
+            uploaded: "Uploaded in Xray",
+            "not-uploaded": "Not Uploaded in Xray",
+            pass: "Pass",
+            fail: "Fail",
+          };
+          const selected = [...activeTcFilters];
+          if (!selected.length) {
+            els.evidenceFilterLabel.textContent = "All TCs";
+            els.evidenceFilterBtn.classList.remove("active");
+          } else {
+            const names = selected.map((value) => labels[value] || value);
+            els.evidenceFilterLabel.textContent =
+              names.length <= 2
+                ? names.join(" + ")
+                : `${names[0]} + ${names.length - 1} more`;
+            els.evidenceFilterBtn.classList.add("active");
+          }
+          els.clearFiltersBtn.hidden = !selected.length;
+        }
+
         function renderCards() {
           const workspace = activeWorkspace();
           const query = els.searchInput.value.trim().toLowerCase();
-          const evidenceFilter = els.evidenceFilter.value;
+          const totalTcs = workspace?.testCases.length || 0;
           const testCases = workspace
             ? workspace.testCases.filter(
                 (tc) =>
-                  matchesQuery(tc, query) &&
-                  matchesEvidenceFilter(tc, evidenceFilter),
+                  matchesQuery(tc, query) && matchesEvidenceFilter(tc, activeTcFilters),
               )
             : [];
+
+          els.tcFilterCount.textContent = workspace
+            ? `${testCases.length} / ${totalTcs} TCs`
+            : "";
 
           els.emptyState.textContent =
             workspace && workspace.testCases.length
@@ -3809,11 +4250,94 @@
               cache: "no-store",
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const health = await response.json().catch(() => ({}));
             workflowState.serviceAvailable = true;
+            workflowState.serverVersion = String(health.version || "");
           } catch {
             workflowState.serviceAvailable = false;
           }
           renderWorkflowPanels();
+          renderVersionStatus();
+          checkForUpdates();
+        }
+
+        function renderVersionStatus() {
+          const line = $("versionStatusLine");
+          if (!line) return;
+          const text = $("versionStatusText");
+          const appLabel = `v${APP_VERSION}`;
+          line.classList.remove("ok", "warn", "err");
+          if (!workflowState.serviceAvailable) {
+            text.textContent =
+              "App v" + APP_VERSION +
+              " · Local server: not running — start it with sh ~/xray-evidence-server/start-server.sh (latest v" +
+              APP_VERSION + ")";
+            line.classList.add("err");
+            return;
+          }
+          const serverVersion = workflowState.serverVersion;
+          if (!serverVersion) {
+            text.textContent =
+              "Local server: running (version unknown, update recommended). Latest server version: v" +
+              APP_VERSION;
+            line.classList.add("warn");
+            return;
+          }
+          if (serverVersion === APP_VERSION) {
+            text.textContent =
+              "Local server v" + serverVersion + " — up to date (app " + appLabel + ")";
+            line.classList.add("ok");
+            return;
+          }
+          text.textContent =
+            "Local server v" + serverVersion +
+            " — update needed. Latest server version: v" + APP_VERSION +
+            ". Re-run the installer command to update.";
+          line.classList.add("warn");
+        }
+
+        function scheduleUpdateCheck() {
+          setTimeout(() => {
+            checkWorkflowService();
+            scheduleUpdateCheck();
+          }, UPDATE_CHECK_INTERVAL_MS);
+        }
+
+        function showUpdateBanner(message) {
+          const banner = $("updateBanner");
+          if (!banner || banner.hidden === false) return;
+          const dismissed = localStorage.getItem(`${STORAGE_KEY}-update-dismissed`);
+          if (dismissed === message) return;
+          $("updateBannerText").textContent = message;
+          banner.hidden = false;
+        }
+
+        async function checkForUpdates() {
+          if (
+            workflowState.serverVersion &&
+            workflowState.serverVersion !== APP_VERSION
+          ) {
+            showUpdateBanner(
+              `Server update needed: the local server is v${workflowState.serverVersion} but this app is v${APP_VERSION}. Re-run the installer command to update, then restart the server.`,
+            );
+            return;
+          }
+          try {
+            const response = await fetch(
+              `${window.location.href.split("#")[0]}?update-check=${Date.now()}`,
+              { cache: "no-store" },
+            );
+            if (!response.ok) return;
+            const html = await response.text();
+            const match = html.match(/APP_VERSION\s*=\s*"([^"]+)"/);
+            if (match && match[1] !== APP_VERSION) {
+              showUpdateBanner(
+                `A new update is live (v${match[1]}). Reload the app to get the latest version.`,
+              );
+            }
+          } catch {
+            // Update check is best-effort only.
+          }
         }
 
         async function startXrayWorkflowForTc(tcId) {
@@ -5285,6 +5809,12 @@
         }
 
         // GitHub Gist settings and sync helpers
+        // GitHub rejects a single gist file's content once it's roughly
+        // above 1MB ("contents are too large and cannot be saved"), so
+        // large exports are split into workspaces.part1.json..partN.json
+        // plus a workspaces.manifest.json describing the part count.
+        const GIST_CHUNK_CHAR_LIMIT = 900000;
+
         function loadGistSettings() {
           try {
             const saved = JSON.parse(
@@ -5469,8 +5999,8 @@
             }
 
             const gistData = await resp.json();
-            const wsFile = gistData.files["workspaces.json"];
-            if (!wsFile) {
+            const fileText = await loadGistWorkspacesText(gistData);
+            if (fileText === null) {
               if (!silent)
                 toast(
                   "Gist does not contain workspaces.json file. Create one first.",
@@ -5478,7 +6008,6 @@
               return;
             }
 
-            const fileText = await loadGistFileContent(wsFile);
             const content = JSON.parse(fileText);
             const remoteWorkspaces = Array.isArray(content.workspaces)
               ? content.workspaces
@@ -5527,6 +6056,34 @@
           return rawResp.text();
         }
 
+        // Reads the exported workspaces JSON text from a gist, transparently
+        // reassembling it from chunked workspaces.partN.json files when the
+        // gist has a workspaces.manifest.json (see GIST_CHUNK_CHAR_LIMIT).
+        // Returns null if the gist has neither layout.
+        async function loadGistWorkspacesText(gistData) {
+          const manifestFile = gistData.files["workspaces.manifest.json"];
+          if (manifestFile) {
+            const manifestText = await loadGistFileContent(manifestFile);
+            const manifest = JSON.parse(manifestText);
+            const parts = Number(manifest.parts) || 0;
+            let text = "";
+            for (let i = 1; i <= parts; i++) {
+              const partFile = gistData.files[`workspaces.part${i}.json`];
+              if (!partFile) {
+                throw new Error(
+                  `Gist manifest expects ${parts} part(s) but workspaces.part${i}.json is missing.`,
+                );
+              }
+              text += await loadGistFileContent(partFile);
+            }
+            return text;
+          }
+
+          const wsFile = gistData.files["workspaces.json"];
+          if (!wsFile) return null;
+          return loadGistFileContent(wsFile);
+        }
+
         async function pushToGist(options = {}) {
           const confirmBeforePush = options.confirmBeforePush !== false;
           const gistId = (els.gistId?.value || "").trim();
@@ -5556,22 +6113,71 @@
           }
 
           try {
+            const getResp = await fetch(
+              `https://api.github.com/gists/${gistId}`,
+              { headers: gistAuthHeaders() },
+            );
+            if (!getResp.ok) {
+              throw new Error(
+                `Failed to fetch gist: ${getResp.status} ${getResp.statusText}`,
+              );
+            }
+            const currentGistData = await getResp.json();
+            const existingFilenames = new Set(
+              Object.keys(currentGistData.files || {}),
+            );
+
             const fileContent = {
               workspaces: await hydrateWorkspacesForExport(state.workspaces),
             };
+            const json = JSON.stringify(fileContent);
+
+            let files;
+            const targetFilenames = new Set();
+            if (json.length <= GIST_CHUNK_CHAR_LIMIT) {
+              targetFilenames.add("workspaces.json");
+              files = { "workspaces.json": { content: json } };
+            } else {
+              const parts = [];
+              for (let i = 0; i < json.length; i += GIST_CHUNK_CHAR_LIMIT) {
+                parts.push(json.slice(i, i + GIST_CHUNK_CHAR_LIMIT));
+              }
+              files = {
+                "workspaces.manifest.json": {
+                  content: JSON.stringify({ parts: parts.length }),
+                },
+              };
+              targetFilenames.add("workspaces.manifest.json");
+              parts.forEach((part, index) => {
+                const filename = `workspaces.part${index + 1}.json`;
+                files[filename] = { content: part };
+                targetFilenames.add(filename);
+              });
+            }
+
+            // Only delete gist files that currently exist, belong to this
+            // tool's own workspaces.* naming scheme, and are no longer part
+            // of this push's layout (e.g. the old single workspaces.json
+            // when switching to chunked, or stale workspaces.partN.json
+            // files left over from a previous push that needed more parts).
+            // Leave any other files in the gist untouched.
+            const WORKSPACES_FILENAME_RE =
+              /^workspaces(\.manifest|\.part\d+)?\.json$/;
+            for (const filename of existingFilenames) {
+              if (
+                WORKSPACES_FILENAME_RE.test(filename) &&
+                !targetFilenames.has(filename)
+              ) {
+                files[filename] = null;
+              }
+            }
 
             const patchResp = await fetch(
               `https://api.github.com/gists/${gistId}`,
               {
                 method: "PATCH",
                 headers: gistAuthHeaders(),
-                body: JSON.stringify({
-                  files: {
-                    "workspaces.json": {
-                      content: JSON.stringify(fileContent, null, 2),
-                    },
-                  },
-                }),
+                body: JSON.stringify({ files }),
               },
             );
 
@@ -5717,13 +6323,18 @@
             .some((value) => String(value).toLowerCase().includes(query));
         }
 
-        function matchesEvidenceFilter(tc, filter) {
+        function matchesEvidenceFilter(tc, filters) {
+          if (!filters || !filters.size) return true;
           const hasEvidence = Boolean(tc.images?.length);
-          if (filter === "with") return hasEvidence;
-          if (filter === "without") return !hasEvidence;
-          if (filter === "uploaded") return Boolean(tc.xrayUploaded);
-          if (filter === "not-uploaded") return !tc.xrayUploaded;
-          return true;
+          return [...filters].every((filter) => {
+            if (filter === "with") return hasEvidence;
+            if (filter === "without") return !hasEvidence;
+            if (filter === "uploaded") return Boolean(tc.xrayUploaded);
+            if (filter === "not-uploaded") return !tc.xrayUploaded;
+            if (filter === "pass") return normalizeStatus(tc.status) === "pass";
+            if (filter === "fail") return normalizeStatus(tc.status) === "fail";
+            return true;
+          });
         }
 
         function findHeader(headers, candidates) {

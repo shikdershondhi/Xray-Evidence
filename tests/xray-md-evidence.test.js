@@ -62,6 +62,17 @@ function testCaseFixture(overrides = {}) {
   };
 }
 
+async function stubWorkflowService(page) {
+  await page.route("http://127.0.0.1:39291/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/health") {
+      route.fulfill({ json: { status: "ready" } });
+      return;
+    }
+    route.fulfill({ json: {} });
+  });
+}
+
 async function seedWorkspace(page, workspace) {
   await page.addInitScript((payload) => {
     if (!localStorage.getItem("neustring-xray-md-evidence-builder-v1")) {
@@ -276,17 +287,62 @@ test("uploaded in Xray checkbox defaults unchecked, persists, and filters cards"
       true,
     );
 
-    await page.locator("#evidenceFilter").selectOption("uploaded");
+    await page.locator("#evidenceFilterBtn").click();
+    await page.locator('#evidenceFilterMenu input[value="uploaded"]').check();
     await assert.equal(await page.locator('article[data-tc="TC-001"]').count(), 1);
     await assert.equal(await page.locator('article[data-tc="TC-002"]').count(), 1);
 
-    await page.locator("#evidenceFilter").selectOption("all");
+    await page.locator("#clearFiltersBtn").click();
     await page
       .locator('input[data-action="xray-uploaded"][data-tc="TC-001"]')
       .uncheck();
-    await page.locator("#evidenceFilter").selectOption("not-uploaded");
+    await page.locator("#evidenceFilterBtn").click();
+    await page.locator('#evidenceFilterMenu input[value="not-uploaded"]').check();
     await assert.equal(await page.locator('article[data-tc="TC-001"]').count(), 1);
     await assert.equal(await page.locator('article[data-tc="TC-002"]').count(), 0);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("filter supports multiple options, shows match count, and clear button", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "Login flow", status: "pass" }),
+        testCaseFixture({ id: "TC-002", title: "Upload evidence", status: "fail" }),
+        testCaseFixture({ id: "TC-003", title: "Logout flow", status: "unset" }),
+      ]),
+    );
+
+    await page.goto(htmlUrl);
+    await page.waitForSelector("article.tc-card");
+    await assert.equal(await page.locator("article.tc-card").count(), 3);
+    await assert.equal(await page.locator("#clearFiltersBtn").isHidden(), true);
+    assert.equal(await page.locator("#tcFilterCount").textContent(), "3 / 3 TCs");
+
+    await page.locator("#evidenceFilterBtn").click();
+    await page.locator('#evidenceFilterMenu input[value="pass"]').check();
+    await assert.equal(await page.locator("article.tc-card").count(), 1);
+    assert.equal(await page.locator("#tcFilterCount").textContent(), "1 / 3 TCs");
+    await assert.equal(await page.locator("#clearFiltersBtn").isHidden(), false);
+
+    await page.locator('#evidenceFilterMenu input[value="fail"]').check();
+    await assert.equal(await page.locator("article.tc-card").count(), 0);
+    assert.equal(
+      await page.locator("#evidenceFilterLabel").textContent(),
+      "Pass + Fail",
+    );
+
+    await page.locator("#clearFiltersBtn").click();
+    await assert.equal(await page.locator("article.tc-card").count(), 3);
+    assert.equal(await page.locator("#tcFilterCount").textContent(), "3 / 3 TCs");
+    await assert.equal(await page.locator("#clearFiltersBtn").isHidden(), true);
+    assert.equal(await page.locator("#evidenceFilterLabel").textContent(), "All TCs");
   } finally {
     await browser.close();
   }
@@ -388,6 +444,10 @@ test("testcase Save pushes to Gist without confirmation", async () => {
       };
     });
     await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({ json: { id: "gist-1", files: {} } });
+        return;
+      }
       if (route.request().method() === "PATCH") {
         gistPatchCount += 1;
         await route.fulfill({ json: { id: "gist-1" } });
@@ -423,6 +483,7 @@ test("testcase Save pushes to Gist without confirmation", async () => {
 test("settings Push to Gist keeps the existing confirmation", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
   let gistPatchCount = 0;
 
   try {
@@ -448,6 +509,10 @@ test("settings Push to Gist keeps the existing confirmation", async () => {
       };
     });
     await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({ json: { id: "gist-1", files: {} } });
+        return;
+      }
       if (route.request().method() === "PATCH") {
         gistPatchCount += 1;
         await route.fulfill({ json: { id: "gist-1" } });
@@ -471,6 +536,7 @@ test("settings Push to Gist keeps the existing confirmation", async () => {
 test("saved Gist settings do not start automatic sync on load or save", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
   let gistGetCount = 0;
 
   try {
@@ -519,6 +585,333 @@ test("saved Gist settings do not start automatic sync on load or save", async ()
       0,
     );
     assert.equal(gistGetCount, 0);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("Push to Gist splits oversized payloads into chunked gist files", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let capturedBody = null;
+  const oversizedDataUrl = "data:image/png;base64," + "A".repeat(2000000);
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Upload evidence",
+          images: [
+            {
+              id: "img-1",
+              dataUrl: oversizedDataUrl,
+              note: "Large screenshot",
+              createdAt: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1-gist",
+        JSON.stringify({
+          username: "octocat",
+          token: "token-1",
+          gistId: "gist-1",
+        }),
+      );
+      window.confirm = () => true;
+    });
+    await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          json: {
+            id: "gist-1",
+            files: {
+              "workspaces.json": { content: JSON.stringify({ workspaces: [] }) },
+            },
+          },
+        });
+        return;
+      }
+      if (route.request().method() === "PATCH") {
+        capturedBody = JSON.parse(route.request().postData());
+        await route.fulfill({ json: { id: "gist-1" } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="save-to-gist"][data-tc="TC-001"]')
+      .click();
+    await page
+      .locator(".toast", { hasText: "Pushed 1 workspace(s) to Gist" })
+      .waitFor();
+
+    assert.ok(capturedBody);
+    const files = capturedBody.files;
+    assert.equal(files["workspaces.json"], null);
+    assert.ok(files["workspaces.manifest.json"]);
+    const manifest = JSON.parse(files["workspaces.manifest.json"].content);
+    assert.ok(manifest.parts > 1);
+
+    let reassembled = "";
+    for (let i = 1; i <= manifest.parts; i++) {
+      const part = files[`workspaces.part${i}.json`];
+      assert.ok(part, `missing part ${i}`);
+      assert.ok(part.content.length <= 900000);
+      reassembled += part.content;
+    }
+
+    const parsed = JSON.parse(reassembled);
+    assert.equal(parsed.workspaces.length, 1);
+    assert.equal(
+      parsed.workspaces[0].testCases[0].images[0].dataUrl,
+      oversizedDataUrl,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("Push to Gist cleans up stale part files left over from a larger previous push", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let capturedBody = null;
+  const oversizedDataUrl = "data:image/png;base64," + "A".repeat(2000000);
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Upload evidence",
+          images: [
+            {
+              id: "img-1",
+              dataUrl: oversizedDataUrl,
+              note: "Large screenshot",
+              createdAt: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1-gist",
+        JSON.stringify({
+          username: "octocat",
+          token: "token-1",
+          gistId: "gist-1",
+        }),
+      );
+      window.confirm = () => true;
+    });
+    await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        const files = {
+          "workspaces.manifest.json": {
+            content: JSON.stringify({ parts: 5 }),
+          },
+        };
+        for (let i = 1; i <= 5; i++) {
+          files[`workspaces.part${i}.json`] = { content: "stale-part-data" };
+        }
+        await route.fulfill({ json: { id: "gist-1", files } });
+        return;
+      }
+      if (route.request().method() === "PATCH") {
+        capturedBody = JSON.parse(route.request().postData());
+        await route.fulfill({ json: { id: "gist-1" } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="save-to-gist"][data-tc="TC-001"]')
+      .click();
+    await page
+      .locator(".toast", { hasText: "Pushed 1 workspace(s) to Gist" })
+      .waitFor();
+
+    assert.ok(capturedBody);
+    const files = capturedBody.files;
+    const manifest = JSON.parse(files["workspaces.manifest.json"].content);
+    assert.ok(manifest.parts < 5, "expected fewer parts than the stale gist had");
+    assert.equal(files["workspaces.json"], undefined);
+    for (let i = 1; i <= manifest.parts; i++) {
+      assert.ok(files[`workspaces.part${i}.json`]?.content, `missing part ${i}`);
+    }
+    for (let i = manifest.parts + 1; i <= 5; i++) {
+      assert.equal(
+        files[`workspaces.part${i}.json`],
+        null,
+        `stale part ${i} should be nulled out`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+test("Push to Gist sends no delete entries when the gist has no existing files", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let capturedBody = null;
+  const oversizedDataUrl = "data:image/png;base64," + "A".repeat(2000000);
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Upload evidence",
+          images: [
+            {
+              id: "img-1",
+              dataUrl: oversizedDataUrl,
+              note: "Large screenshot",
+              createdAt: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1-gist",
+        JSON.stringify({
+          username: "octocat",
+          token: "token-1",
+          gistId: "gist-1",
+        }),
+      );
+      window.confirm = () => true;
+    });
+    await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({ json: { id: "gist-1", files: {} } });
+        return;
+      }
+      if (route.request().method() === "PATCH") {
+        capturedBody = JSON.parse(route.request().postData());
+        await route.fulfill({ json: { id: "gist-1" } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(htmlUrl);
+    await page
+      .locator('button[data-action="save-to-gist"][data-tc="TC-001"]')
+      .click();
+    await page
+      .locator(".toast", { hasText: "Pushed 1 workspace(s) to Gist" })
+      .waitFor();
+
+    assert.ok(capturedBody);
+    const files = capturedBody.files;
+    const nullEntries = Object.values(files).filter((value) => value === null);
+    assert.equal(nullEntries.length, 0, "should not send any delete entries");
+  } finally {
+    await browser.close();
+  }
+});
+
+test("Sync from Gist reassembles workspaces from chunked gist files", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  await stubWorkflowService(page);
+
+  try {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "neustring-xray-md-evidence-builder-v1-gist",
+        JSON.stringify({
+          username: "octocat",
+          token: "token-1",
+          gistId: "gist-1",
+        }),
+      );
+    });
+
+    const remoteWorkspace = {
+      id: "ws-remote",
+      name: "Remote Workspace",
+      sourceName: "source.md",
+      sourceType: "markdown",
+      createdAt: "2026-05-20T00:00:00.000Z",
+      updatedAt: "2026-05-20T00:00:00.000Z",
+      testCases: [
+        {
+          id: "TC-100",
+          title: "Remote evidence",
+          summary: "",
+          relatedAc: "",
+          precondition: "",
+          steps: [],
+          expectedResult: "",
+          actualResult: "Synced from gist.",
+          status: "pass",
+          sourceLine: 1,
+          images: [
+            {
+              id: "img-remote-1",
+              dataUrl: onePixelPng,
+              note: "Remote screenshot",
+              createdAt: "2026-05-20T00:01:00.000Z",
+            },
+          ],
+        },
+      ],
+    };
+    const json = JSON.stringify({ workspaces: [remoteWorkspace] }, null, 2);
+    const chunkSize = 40; // small on purpose to force multiple parts here
+    const parts = [];
+    for (let i = 0; i < json.length; i += chunkSize) {
+      parts.push(json.slice(i, i + chunkSize));
+    }
+
+    await page.route("https://api.github.com/gists/gist-1", async (route) => {
+      if (route.request().method() === "GET") {
+        const files = {
+          "workspaces.manifest.json": {
+            content: JSON.stringify({ parts: parts.length }),
+          },
+        };
+        parts.forEach((part, index) => {
+          files[`workspaces.part${index + 1}.json`] = { content: part };
+        });
+        await route.fulfill({ json: { id: "gist-1", files } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.locator("#syncGistBtn").click();
+    await page
+      .locator(".toast", { hasText: "Synced workspaces from Gist" })
+      .waitFor();
+
+    const state = await readStoredState(page);
+    assert.equal(state.workspaces.length, 1);
+    assert.equal(state.workspaces[0].id, "ws-remote");
+    assert.equal(state.workspaces[0].testCases[0].id, "TC-100");
+    assert.deepEqual(await readStoredImageKeys(page), [
+      "ws-remote/TC-100/img-remote-1",
+    ]);
   } finally {
     await browser.close();
   }
@@ -672,6 +1065,7 @@ test("workflow result marks failed local testcase uploaded when matching item up
 test("saving workflow settings refreshes visible values and marks workspace modified", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     const workspace = workspaceWithUploadedCases([
@@ -1530,6 +1924,7 @@ test("copy seperatly shows fallback guidance when multi-image clipboard write fa
 test("settings clear evidence files removes only uploaded Xray evidence from active workspace", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await seedWorkspace(page, {
@@ -1652,6 +2047,7 @@ test("settings clear evidence files removes only uploaded Xray evidence from act
 test("settings clear evidence files cancel keeps uploaded evidence files", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await seedWorkspace(
@@ -1692,6 +2088,7 @@ test("settings clear evidence files cancel keeps uploaded evidence files", async
 test("settings clear evidence files shows no-op toast when no uploaded evidence files match", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await seedWorkspace(
@@ -2074,6 +2471,7 @@ test("copy pic requires testcase evidence screenshots", async () => {
 test("standalone bug reporter opens empty without save and clears on close", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await page.goto(htmlUrl);
@@ -2143,6 +2541,7 @@ test("standalone bug reporter opens empty without save and clears on close", asy
 test("standalone copy info writes only manual bug report text", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await page.addInitScript(() => {
@@ -2195,6 +2594,7 @@ test("standalone copy info writes only manual bug report text", async () => {
 test("standalone copy pic merges pasted screenshots without text", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await page.addInitScript(() => {
@@ -2298,6 +2698,7 @@ test("standalone copy pic merges pasted screenshots without text", async () => {
 test("help icon opens the embedded user manual with setup guidance", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  await stubWorkflowService(page);
 
   try {
     await page.goto(htmlUrl);
