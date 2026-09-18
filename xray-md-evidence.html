@@ -1541,6 +1541,12 @@
         overflow-wrap: anywhere;
       }
 
+      .image-pasted-at {
+        color: var(--muted);
+        font-size: 11px;
+        opacity: 0.7;
+      }
+
       .image-tools {
         display: flex;
         flex-wrap: wrap;
@@ -3132,7 +3138,8 @@
           return `<div class="image-card">
           <img src="${src}" alt="Standalone bug report evidence ${index + 1}">
           <div class="image-info">
-            <span class="image-name"><span class="image-order">${index + 1}</span> Image ${index + 1} · ${formatDate(image.createdAt)}</span>
+            <span class="image-name"><span class="image-order">${index + 1}</span> Image ${index + 1}</span>
+            <span class="image-pasted-at">Pasted ${formatDate(image.createdAt)}</span>
             <span class="image-tools">
               <button class="small ghost" data-action="standalone-bug-move-up" data-index="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
               <button class="small ghost" data-action="standalone-bug-move-down" data-index="${index}" ${index === standaloneBugReport.images.length - 1 ? "disabled" : ""}>Down</button>
@@ -3780,7 +3787,8 @@
           return `<div class="image-card">
           <img src="${src}" alt="${tc.id} evidence ${index + 1}">
           <div class="image-info">
-            <span class="image-name"><span class="image-order">${index + 1}</span> Image ${index + 1} · ${formatDate(image.createdAt)}</span>
+            <span class="image-name"><span class="image-order">${index + 1}</span> Image ${index + 1}</span>
+            <span class="image-pasted-at">Pasted ${formatDate(image.createdAt)}</span>
             <span class="image-tools">
               <button class="small ghost" data-action="move-up" data-tc="${tc.id}" data-index="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
               <button class="small ghost" data-action="move-down" data-tc="${tc.id}" data-index="${index}" ${index === tc.images.length - 1 ? "disabled" : ""}>Down</button>
