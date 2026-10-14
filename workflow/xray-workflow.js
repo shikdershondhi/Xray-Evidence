@@ -330,7 +330,7 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
     message: failed.length
       ? `${failed.length} testcase upload failed.`
       : skipped.length
-        ? `Workflow completed; ${skipped.length} already executed testcase skipped.`
+        ? `Workflow completed; ${skipped.length} testcase(s) skipped.`
         : "All evidence uploaded to Xray.",
     results,
   };

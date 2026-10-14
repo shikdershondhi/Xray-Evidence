@@ -1426,6 +1426,74 @@ test("workbench workflow skips testcases already uploaded in Xray", async () => 
   }
 });
 
+test("workbench workflow excludes Blocked testcases from the upload queue", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let startCount = 0;
+  let requestItems = [];
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({
+          id: "TC-001",
+          title: "Blocked evidence",
+          status: "blocked",
+          xrayUploaded: false,
+        }),
+        testCaseFixture({
+          id: "TC-002",
+          title: "Passing evidence",
+          status: "pass",
+          xrayUploaded: false,
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        startCount += 1;
+        const body = JSON.parse(route.request().postData() || "{}");
+        requestItems = body.items || [];
+        await route.fulfill({
+          json: { runId: "run-skip-blocked", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-skip-blocked",
+          status: "success",
+          message: "Workflow finished.",
+          payloadSummary: { itemCount: 1, browserMode: "headless" },
+          logs: [],
+          results: [{ testcaseName: "Passing evidence", status: "success" }],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+    await page.locator(".toast", { hasText: "Workflow queue completed" }).waitFor();
+
+    assert.equal(startCount, 1);
+    assert.deepEqual(
+      requestItems.map((item) => item.testcaseName),
+      ["Passing evidence"],
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
 test("actual result and screenshot notes render markdown previews safely", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
