@@ -79,3 +79,17 @@ test("GitHub Pages workflow deploys the static landing page artifact", () => {
   assert.match(workflow, /cp install-mac-linux\.sh _site\/install-mac-linux\.sh/);
   assert.match(workflow, /cp install-windows\.ps1 _site\/install-windows\.ps1/);
 });
+
+test("install-windows.ps1 does not exit the caller's terminal and keeps the Jira session", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const script = fs.readFileSync(path.join(__dirname, "..", "install-windows.ps1"), "utf8");
+
+  // `exit` under `irm | iex` would close the user's own PowerShell window.
+  assert.doesNotMatch(script, /^\s*exit\b/m);
+  assert.match(script, /^\s*return\b/m);
+
+  // Re-install must carry the saved Jira session over.
+  assert.match(script, /\.xray-auth/);
+  assert.match(script, /Copy-Item[^\n]*\$AuthDir/);
+});

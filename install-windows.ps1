@@ -13,22 +13,32 @@ function Say($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 
 Say "Checking Node.js"
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-  Write-Host "Node.js is not installed."
+  Write-Host "Node.js is not installed." -ForegroundColor Red
   Write-Host "Install the LTS from https://nodejs.org then re-run this script."
-  exit 1
+  return
 }
 Write-Host "Found $(node -v) / npm $(npm -v)"
 
 Say "Downloading server bundle into $InstallDir"
 $Tmp = Join-Path $env:TEMP ("xray-evidence-" + [guid]::NewGuid().ToString("N"))
 $Zip = Join-Path $Tmp "repo.zip"
+$AuthDir = Join-Path $InstallDir ".xray-auth"
+$AuthBackup = Join-Path $Tmp "xray-auth-backup"
 New-Item -ItemType Directory -Path $Tmp | Out-Null
 try {
   Invoke-WebRequest -Uri "https://github.com/$Repo/archive/refs/heads/$Branch.zip" `
     -OutFile $Zip -UseBasicParsing
   Expand-Archive -Path $Zip -DestinationPath $Tmp -Force
-  if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
+  if (Test-Path $InstallDir) {
+    # Keep the saved Jira/Xray login across re-installs (it lives in the install dir).
+    if (Test-Path $AuthDir) { Copy-Item -Recurse -Path $AuthDir -Destination $AuthBackup }
+    Remove-Item -Recurse -Force $InstallDir
+  }
   Move-Item (Join-Path $Tmp "Xray-Evidence-$Branch") $InstallDir
+  if (Test-Path $AuthBackup) {
+    Copy-Item -Recurse -Path $AuthBackup -Destination $AuthDir
+    Write-Host "Kept your saved Jira session."
+  }
 } finally {
   Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue
 }
@@ -37,11 +47,17 @@ Set-Location $InstallDir
 
 Say "Installing npm dependencies (this can take a few minutes)"
 npm install --no-fund --no-audit
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "npm install failed (exit code $LASTEXITCODE)." -ForegroundColor Red
+  return
+}
 
 Say "Installing Playwright Chromium browser"
 npx playwright install chromium
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Playwright Chromium install failed (exit code $LASTEXITCODE)." -ForegroundColor Red
+  return
+}
 
 Say "Writing start script"
 @"
