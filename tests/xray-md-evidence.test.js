@@ -3230,3 +3230,85 @@ test("Upload Pass only setting is locked while a workflow queue is running", asy
     await browser.close();
   }
 });
+
+test("workflow payload keeps the starting workspace's passOnly when another workspace is selected mid-start", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let requestBody = null;
+  let holdHealth = false;
+  let releaseHealth;
+  const healthGate = new Promise((resolve) => {
+    releaseHealth = resolve;
+  });
+
+  try {
+    const seeded = workspaceWithUploadedCases([
+      testCaseFixture({ id: "TC-001", title: "Failing flow", status: "fail", xrayUploaded: false }),
+      testCaseFixture({ id: "TC-002", title: "Passing flow", status: "pass", xrayUploaded: false }),
+    ]);
+    seeded.workspaces.push({
+      id: "ws-2",
+      name: "Pass Only Workspace",
+      sourceName: "other.md",
+      sourceType: "markdown",
+      createdAt: "2026-05-19T00:00:00.000Z",
+      updatedAt: "2026-05-19T00:00:00.000Z",
+      workflow: {
+        testExecutionSummary: "NS-2 Test Execution",
+        browserMode: "headless",
+        passOnly: true,
+        savedAt: "2026-05-19T00:00:00.000Z",
+      },
+      testCases: [],
+    });
+    await seedWorkspace(page, seeded);
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        if (holdHealth) await healthGate;
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        requestBody = JSON.parse(route.request().postData() || "{}");
+        await route.fulfill({
+          json: { runId: "run-race", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-race",
+          status: "success",
+          message: "Workflow finished.",
+          payloadSummary: { itemCount: 2, browserMode: "headless" },
+          logs: [],
+          results: [],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.waitForSelector("article.tc-card");
+    holdHealth = true;
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+    await page.locator(".project-item", { hasText: "Pass Only Workspace" }).click();
+    holdHealth = false;
+    const startRequest = page.waitForEvent("requestfinished", {
+      predicate: (request) => request.url().endsWith("/workflow/start"),
+    });
+    releaseHealth();
+    await startRequest;
+
+    assert.equal(requestBody.passOnly, false);
+    assert.deepEqual(
+      requestBody.items.map((item) => item.testcaseName),
+      ["Failing flow", "Passing flow"],
+    );
+  } finally {
+    await browser.close();
+  }
+});

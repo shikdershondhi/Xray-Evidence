@@ -4544,6 +4544,8 @@
 
         async function startXrayWorkflow(testCases, mode, options = {}) {
           const summary = workflowState.summary.trim();
+          // Snapshot now: selecting another workspace while evidence is composed must not change this run.
+          const passOnly = workflowState.passOnly;
           if (!summary) {
             throw new Error("Open Settings and save the Xray test execution summary once for this workspace.");
           }
@@ -4600,7 +4602,7 @@
               testExecutionSummary: summary,
               mode,
               browserMode: workflowState.browserMode,
-              passOnly: workflowState.passOnly,
+              passOnly,
               items,
             }),
           });
