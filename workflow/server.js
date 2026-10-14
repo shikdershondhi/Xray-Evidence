@@ -143,6 +143,7 @@ function validateWorkflowPayload(payload) {
   const testExecutionSummary = String(payload.testExecutionSummary || "").trim();
   const mode = payload.mode === "batch" ? "batch" : "single";
   const browserMode = normalizeBrowserMode(payload.browserMode);
+  const passOnly = payload.passOnly === true;
   const items = Array.isArray(payload.items) ? payload.items : [];
 
   if (!testExecutionSummary) {
@@ -165,7 +166,7 @@ function validateWorkflowPayload(payload) {
     return { testcaseName, evidencePngDataUrl, status };
   });
 
-  return { testExecutionSummary, mode, browserMode, items: normalizedItems };
+  return { testExecutionSummary, mode, browserMode, passOnly, items: normalizedItems };
 }
 
 function createRun(payload) {
