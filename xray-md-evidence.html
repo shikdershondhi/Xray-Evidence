@@ -3724,7 +3724,10 @@
           const runState = workflowState.workflowRunsByTcId.get(tc.id);
           const browserMode = normalizeBrowserMode(workflowState.browserMode);
           const noEvidence = !images.length;
-          const workflowDisabled = noEvidence || workflowState.queueActive;
+          const workflowDisabled =
+            noEvidence ||
+            workflowState.queueActive ||
+            normalizeStatus(tc.status) === "blocked";
           const cancelDisabled = !isActiveWorkflowRun(runState?.run);
           const summaryText = workflowState.summary
             ? escapeHtml(workflowState.summary)
@@ -4372,14 +4375,22 @@
         async function startXrayWorkflowForTc(tcId) {
           const tc = getTc(tcId);
           if (!tc) throw new Error("Test case was not found.");
+          if (normalizeStatus(tc.status) === "blocked") {
+            toast("Blocked test cases are not uploaded to Xray.");
+            return;
+          }
           await startXrayWorkflow([tc], "single");
         }
 
         async function startXrayWorkflowForWorkspace() {
           const workspace = activeWorkspace();
           const items =
-            workspace?.testCases.filter((tc) => tc.images.length && !tc.xrayUploaded) ||
-            [];
+            workspace?.testCases.filter(
+              (tc) =>
+                tc.images.length &&
+                !tc.xrayUploaded &&
+                normalizeStatus(tc.status) !== "blocked",
+            ) || [];
           if (!items.length) {
             toast("No test cases with evidence are pending Xray upload.");
             return;

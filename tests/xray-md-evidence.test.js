@@ -2820,3 +2820,36 @@ test("blocked status can be set, persists, hides Report Bug, and filters cards",
     await browser.close();
   }
 });
+
+test("blocked test cases cannot start the Xray workflow", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "Login flow", status: "blocked" }),
+        testCaseFixture({ id: "TC-002", title: "Upload evidence", status: "pass" }),
+      ]),
+    );
+    await stubWorkflowService(page);
+
+    await page.goto(htmlUrl);
+    await page.waitForSelector("article.tc-card");
+    assert.equal(
+      await page
+        .locator('button[data-action="start-workflow"][data-tc="TC-001"]')
+        .isDisabled(),
+      true,
+    );
+    assert.equal(
+      await page
+        .locator('button[data-action="start-workflow"][data-tc="TC-002"]')
+        .isDisabled(),
+      false,
+    );
+  } finally {
+    await browser.close();
+  }
+});

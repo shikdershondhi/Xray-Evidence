@@ -30,6 +30,8 @@ test("normalizes workflow item statuses", () => {
   assert.equal(normalizeWorkflowStatus("PASS"), "pass");
   assert.equal(normalizeWorkflowStatus("anything else"), "pass");
   assert.equal(normalizeWorkflowStatus(undefined), "pass");
+  assert.equal(normalizeWorkflowStatus("blocked"), "blocked");
+  assert.equal(normalizeWorkflowStatus("BLOCKED"), "blocked");
 });
 
 test("requires Xray execution status click to report workflow success", async () => {

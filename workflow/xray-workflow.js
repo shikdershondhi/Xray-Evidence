@@ -139,7 +139,9 @@ function dataUrlToBuffer(dataUrl) {
 
 function normalizeWorkflowStatus(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  return normalized === "fail" ? "fail" : "pass";
+  if (normalized === "fail") return "fail";
+  if (normalized === "blocked") return "blocked";
+  return "pass";
 }
 
 function normalizeBrowserMode(value) {
@@ -229,6 +231,19 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
 
   for (const [index, item] of payload.items.entries()) {
     throwIfWorkflowCancelled(options.signal);
+    if (normalizeWorkflowStatus(item.status) === "blocked") {
+      const message = "Skipped because local status is Blocked.";
+      notifyLog(notify, "warn", item.testcaseName, message);
+      const blockedResult = {
+        testcaseName: item.testcaseName,
+        status: "skipped",
+        localStatus: "blocked",
+        message,
+      };
+      results.push(blockedResult);
+      options.onResult?.(blockedResult);
+      continue;
+    }
     let currentStep = "Starting testcase";
     try {
       if (index > 0) {
