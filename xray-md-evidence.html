@@ -2356,6 +2356,10 @@
                 Headed
               </label>
             </div>
+            <label class="workflow-mode-option" style="display: block; margin-top: 8px">
+              <input id="workflowPassOnlySetting" type="checkbox" />
+              Upload Pass only (skip Fail test cases)
+            </label>
             <div class="settings-actions">
               <button id="saveWorkflowSettingsBtn" class="ghost small">
                 Save Workflow Settings
@@ -2513,6 +2517,7 @@
         const workflowState = {
           summary: "",
           browserMode: "headless",
+          passOnly: false,
           serviceAvailable: false,
           serverVersion: "",
           queueActive: false,
@@ -2599,6 +2604,7 @@
           pushGistBtn: $("pushGistBtn"),
           workflowSummarySetting: $("workflowSummarySetting"),
           saveWorkflowSettingsBtn: $("saveWorkflowSettingsBtn"),
+          workflowPassOnlySetting: $("workflowPassOnlySetting"),
           imageLightbox: $("imageLightbox"),
           lightboxCloseBtn: $("lightboxCloseBtn"),
           lightboxImg: $("lightboxImg"),
@@ -3759,7 +3765,7 @@
           const workflowDisabled =
             noEvidence ||
             workflowState.queueActive ||
-            isUploadSkippedStatus(tc.status);
+            isUploadSkippedForWorkflow(tc);
           const cancelDisabled = !isActiveWorkflowRun(runState?.run);
           const summaryText = workflowState.summary
             ? escapeHtml(workflowState.summary)
@@ -4220,9 +4226,11 @@
             workflowState.browserMode = normalizeBrowserMode(
               workspace.workflow.browserMode,
             );
+            workflowState.passOnly = workspace.workflow.passOnly === true;
           } else {
             workflowState.summary = "";
             workflowState.browserMode = "headless";
+            workflowState.passOnly = false;
           }
           renderWorkflowSettingsUi();
         }
@@ -4258,9 +4266,11 @@
           workflowState.browserMode = normalizeBrowserMode(
             options.browserMode ?? workflowState.browserMode,
           );
+          workflowState.passOnly = (options.passOnly ?? workflowState.passOnly) === true;
           workspace.workflow = {
             testExecutionSummary: workflowState.summary,
             browserMode: workflowState.browserMode,
+            passOnly: workflowState.passOnly,
             savedAt: nowIso(),
           };
           workspace.updatedAt = nowIso();
@@ -4274,12 +4284,17 @@
         }
 
         function saveWorkflowSettingsFromUi() {
+          if (workflowState.queueActive) {
+            toast("Wait for the running workflow queue to finish before changing settings.");
+            return;
+          }
           const browserMode = document.querySelector(
             'input[name="workflowBrowserModeSetting"]:checked',
           )?.value;
           saveWorkflowSettings({
             summary: els.workflowSummarySetting?.value || "",
             browserMode,
+            passOnly: Boolean(els.workflowPassOnlySetting?.checked),
             silent: false,
           });
           toast("Workflow settings saved for this workspace.");
@@ -4296,8 +4311,14 @@
               input.checked = input.value === workflowState.browserMode;
               input.disabled = !activeWorkspace();
             });
+          if (els.workflowPassOnlySetting) {
+            els.workflowPassOnlySetting.checked = workflowState.passOnly;
+            els.workflowPassOnlySetting.disabled =
+              !activeWorkspace() || workflowState.queueActive;
+          }
           if (els.saveWorkflowSettingsBtn) {
-            els.saveWorkflowSettingsBtn.disabled = !activeWorkspace();
+            els.saveWorkflowSettingsBtn.disabled =
+              !activeWorkspace() || workflowState.queueActive;
           }
         }
 
@@ -4312,6 +4333,7 @@
           return {
             testExecutionSummary: cleanText(value.testExecutionSummary),
             browserMode: normalizeBrowserMode(value.browserMode),
+            passOnly: value.passOnly === true,
             savedAt: value.savedAt || "",
           };
         }
@@ -4415,8 +4437,12 @@
         async function startXrayWorkflowForTc(tcId) {
           const tc = getTc(tcId);
           if (!tc) throw new Error("Test case was not found.");
-          if (isUploadSkippedStatus(tc.status)) {
-            toast("Blocked, N/A and Not Run test cases are not uploaded to Xray.");
+          if (isUploadSkippedForWorkflow(tc)) {
+            toast(
+              isUploadSkippedStatus(tc.status)
+                ? "Blocked, N/A and Not Run test cases are not uploaded to Xray."
+                : "Upload Pass only is on, so Fail test cases are not uploaded to Xray.",
+            );
             return;
           }
           await startXrayWorkflow([tc], "single");
@@ -4429,7 +4455,7 @@
               (tc) =>
                 tc.images.length &&
                 !tc.xrayUploaded &&
-                !isUploadSkippedStatus(tc.status),
+                !isUploadSkippedForWorkflow(tc),
             ) || [];
           if (!items.length) {
             toast("No test cases with evidence are pending Xray upload.");
@@ -4446,6 +4472,7 @@
         async function startXrayWorkflowQueue(testCases) {
           if (workflowState.queueActive) return;
           workflowState.queueActive = true;
+          renderWorkflowSettingsUi();
           workflowState.queueCancelRequested = false;
           workflowState.queueTotal = testCases.length;
           workflowState.queueCurrentIndex = 0;
@@ -4496,6 +4523,7 @@
             results = testCases.map((tc) => ({ tc, status: "failed" }));
           } finally {
             workflowState.queueActive = false;
+            renderWorkflowSettingsUi();
             workflowState.queueCancelRequested = false;
             workflowState.queueResults = results.slice();
             render();
@@ -4572,6 +4600,7 @@
               testExecutionSummary: summary,
               mode,
               browserMode: workflowState.browserMode,
+              passOnly: workflowState.passOnly,
               items,
             }),
           });
@@ -6434,6 +6463,12 @@
         // Statuses that never go to Xray: workflow start is disabled and queues skip them.
         function isUploadSkippedStatus(value) {
           return ["blocked", "na", "notrun"].includes(normalizeStatus(value));
+        }
+
+        // Statuses skipped for this run: always-skipped ones, plus Fail when "Upload Pass only" is on.
+        function isUploadSkippedForWorkflow(tc) {
+          if (isUploadSkippedStatus(tc.status)) return true;
+          return workflowState.passOnly && normalizeStatus(tc.status) === "fail";
         }
 
         function workflowStatusForUpload(value) {
