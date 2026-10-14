@@ -137,10 +137,17 @@ function dataUrlToBuffer(dataUrl) {
   return Buffer.from(match[1], "base64");
 }
 
+// Local statuses that are never uploaded to Xray; value is the display label.
+const SKIPPED_LOCAL_STATUS_LABELS = {
+  blocked: "Blocked",
+  na: "N/A",
+  notrun: "Not Run",
+};
+
 function normalizeWorkflowStatus(value) {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized === "fail") return "fail";
-  if (normalized === "blocked") return "blocked";
+  if (Object.hasOwn(SKIPPED_LOCAL_STATUS_LABELS, normalized)) return normalized;
   return "pass";
 }
 
@@ -231,17 +238,18 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
 
   for (const [index, item] of payload.items.entries()) {
     throwIfWorkflowCancelled(options.signal);
-    if (normalizeWorkflowStatus(item.status) === "blocked") {
-      const message = "Skipped because local status is Blocked.";
+    const itemStatus = normalizeWorkflowStatus(item.status);
+    if (Object.hasOwn(SKIPPED_LOCAL_STATUS_LABELS, itemStatus)) {
+      const message = `Skipped because local status is ${SKIPPED_LOCAL_STATUS_LABELS[itemStatus]}.`;
       notifyLog(notify, "warn", item.testcaseName, message);
-      const blockedResult = {
+      const skippedResult = {
         testcaseName: item.testcaseName,
         status: "skipped",
-        localStatus: "blocked",
+        localStatus: itemStatus,
         message,
       };
-      results.push(blockedResult);
-      options.onResult?.(blockedResult);
+      results.push(skippedResult);
+      options.onResult?.(skippedResult);
       continue;
     }
     let currentStep = "Starting testcase";

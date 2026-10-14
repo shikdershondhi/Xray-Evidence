@@ -39,6 +39,12 @@
         --blocked-bg: #f4f0ff;
         --blocked-ink: #4c1d95;
         --blocked-line: #c4b5fd;
+        --na-bg: #f1f5f9;
+        --na-ink: #334155;
+        --na-line: #cbd5e1;
+        --notrun-bg: #ecfeff;
+        --notrun-ink: #155e75;
+        --notrun-line: #67e8f9;
         --modified-bg: #fff7ed;
         --modified-ink: #854d0e;
         --modified-line: #f3c37a;
@@ -86,6 +92,12 @@
         --blocked-bg: #2b1f4a;
         --blocked-ink: #ddd0ff;
         --blocked-line: #6d54b0;
+        --na-bg: #1f2937;
+        --na-ink: #cbd5e1;
+        --na-line: #475569;
+        --notrun-bg: #12313a;
+        --notrun-ink: #b7f0fb;
+        --notrun-line: #2f7f93;
         --modified-bg: #3c2a12;
         --modified-ink: #ffd996;
         --modified-line: #8f671e;
@@ -1473,6 +1485,18 @@
         color: var(--blocked-ink);
       }
 
+      .status-option.na {
+        border-color: var(--na-line);
+        background: var(--na-bg);
+        color: var(--na-ink);
+      }
+
+      .status-option.notrun {
+        border-color: var(--notrun-line);
+        background: var(--notrun-bg);
+        color: var(--notrun-ink);
+      }
+
       .status-option.uploaded {
         border-color: var(--notice-line);
         background: var(--notice-bg);
@@ -1875,6 +1899,12 @@
               <label class="tc-filter-option"
                 ><input type="checkbox" value="blocked" /> Status: Blocked</label
               >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="na" /> Status: N/A</label
+              >
+              <label class="tc-filter-option"
+                ><input type="checkbox" value="notrun" /> Status: Not Run</label
+              >
             </div>
             <span id="tcFilterCount" class="tc-filter-count"></span>
             <button
@@ -2179,7 +2209,7 @@
             <p>
               Use the filter beside search to combine multiple options —
               evidence (with/without), Xray upload state (uploaded/not
-              uploaded), and status (Pass/Fail/Blocked). The count next to the filter
+              uploaded), and status (Pass/Fail/Blocked/N/A/Not Run). The count next to the filter
               shows how many test cases match, and the ✕ button clears all
               active filters.
             </p>
@@ -3586,6 +3616,8 @@
             pass: "Pass",
             fail: "Fail",
             blocked: "Blocked",
+            na: "N/A",
+            notrun: "Not Run",
           };
           const selected = [...activeTcFilters];
           if (!selected.length) {
@@ -3727,7 +3759,7 @@
           const workflowDisabled =
             noEvidence ||
             workflowState.queueActive ||
-            normalizeStatus(tc.status) === "blocked";
+            isUploadSkippedStatus(tc.status);
           const cancelDisabled = !isActiveWorkflowRun(runState?.run);
           const summaryText = workflowState.summary
             ? escapeHtml(workflowState.summary)
@@ -3773,6 +3805,14 @@
             <label class="status-option blocked">
               <input type="checkbox" data-action="status" data-status="blocked" data-tc="${tc.id}" ${status === "blocked" ? "checked" : ""}>
               Blocked
+            </label>
+            <label class="status-option na">
+              <input type="checkbox" data-action="status" data-status="na" data-tc="${tc.id}" ${status === "na" ? "checked" : ""}>
+              N/A
+            </label>
+            <label class="status-option notrun">
+              <input type="checkbox" data-action="status" data-status="notrun" data-tc="${tc.id}" ${status === "notrun" ? "checked" : ""}>
+              Not Run
             </label>
             <label class="status-option uploaded">
               <input type="checkbox" data-action="xray-uploaded" data-tc="${tc.id}" ${tc.xrayUploaded ? "checked" : ""}>
@@ -4375,8 +4415,8 @@
         async function startXrayWorkflowForTc(tcId) {
           const tc = getTc(tcId);
           if (!tc) throw new Error("Test case was not found.");
-          if (normalizeStatus(tc.status) === "blocked") {
-            toast("Blocked test cases are not uploaded to Xray.");
+          if (isUploadSkippedStatus(tc.status)) {
+            toast("Blocked, N/A and Not Run test cases are not uploaded to Xray.");
             return;
           }
           await startXrayWorkflow([tc], "single");
@@ -4389,7 +4429,7 @@
               (tc) =>
                 tc.images.length &&
                 !tc.xrayUploaded &&
-                normalizeStatus(tc.status) !== "blocked",
+                !isUploadSkippedStatus(tc.status),
             ) || [];
           if (!items.length) {
             toast("No test cases with evidence are pending Xray upload.");
@@ -6374,6 +6414,8 @@
             if (filter === "pass") return normalizeStatus(tc.status) === "pass";
             if (filter === "fail") return normalizeStatus(tc.status) === "fail";
             if (filter === "blocked") return normalizeStatus(tc.status) === "blocked";
+            if (filter === "na") return normalizeStatus(tc.status) === "na";
+            if (filter === "notrun") return normalizeStatus(tc.status) === "notrun";
             return true;
           });
         }
@@ -6384,7 +6426,14 @@
 
         function normalizeStatus(value) {
           const normalized = String(value || "").trim().toLowerCase();
-          return ["pass", "fail", "blocked"].includes(normalized) ? normalized : "unset";
+          return ["pass", "fail", "blocked", "na", "notrun"].includes(normalized)
+            ? normalized
+            : "unset";
+        }
+
+        // Statuses that never go to Xray: workflow start is disabled and queues skip them.
+        function isUploadSkippedStatus(value) {
+          return ["blocked", "na", "notrun"].includes(normalizeStatus(value));
         }
 
         function workflowStatusForUpload(value) {

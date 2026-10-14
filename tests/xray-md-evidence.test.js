@@ -2889,6 +2889,165 @@ test("blocked status can be set, persists, hides Report Bug, and filters cards",
   }
 });
 
+for (const { status, label } of [
+  { status: "na", label: "N/A" },
+  { status: "notrun", label: "Not Run" },
+]) {
+  test(`${status} status can be set, persists, hides Report Bug, and filters cards`, async () => {
+    const browser = await chromium.launch();
+    const page = await browser.newPage();
+
+    try {
+      await seedWorkspace(
+        page,
+        workspaceWithUploadedCases([
+          testCaseFixture({ id: "TC-001", title: "Login flow", status: "pass" }),
+          testCaseFixture({ id: "TC-002", title: "Upload evidence", status: "fail" }),
+          testCaseFixture({ id: "TC-003", title: "Logout flow", status: "unset" }),
+        ]),
+      );
+
+      await page.goto(htmlUrl);
+      await page.waitForSelector("article.tc-card");
+
+      const statusInput = (tc) =>
+        page.locator(`input[data-action="status"][data-status="${status}"][data-tc="${tc}"]`);
+
+      await statusInput("TC-003").check();
+      let state = await readStoredState(page);
+      assert.equal(state.workspaces[0].testCases.find((tc) => tc.id === "TC-003").status, status);
+      assert.equal(
+        await page
+          .locator('input[data-action="status"][data-status="pass"][data-tc="TC-003"]')
+          .isChecked(),
+        false,
+      );
+      assert.equal(
+        await page.locator('button[data-action="report-bug"][data-tc="TC-003"]').count(),
+        0,
+      );
+
+      // Switching a failed TC removes its Report Bug button.
+      await statusInput("TC-002").check();
+      assert.equal(
+        await page.locator('button[data-action="report-bug"][data-tc="TC-002"]').count(),
+        0,
+      );
+
+      await page.locator("#evidenceFilterBtn").click();
+      await page.locator(`#evidenceFilterMenu input[value="${status}"]`).check();
+      assert.equal(await page.locator("article.tc-card").count(), 2);
+      assert.equal(await page.locator("#tcFilterCount").textContent(), "2 / 3 TCs");
+      assert.equal(await page.locator("#evidenceFilterLabel").textContent(), label);
+
+      await page.locator("#clearFiltersBtn").click();
+      await statusInput("TC-003").uncheck();
+      state = await readStoredState(page);
+      assert.equal(state.workspaces[0].testCases.find((tc) => tc.id === "TC-003").status, "unset");
+    } finally {
+      await browser.close();
+    }
+  });
+
+  test(`${status} test cases cannot start the Xray workflow`, async () => {
+    const browser = await chromium.launch();
+    const page = await browser.newPage();
+
+    try {
+      await seedWorkspace(
+        page,
+        workspaceWithUploadedCases([
+          testCaseFixture({ id: "TC-001", title: "Login flow", status }),
+          testCaseFixture({ id: "TC-002", title: "Upload evidence", status: "pass" }),
+        ]),
+      );
+      await stubWorkflowService(page);
+
+      await page.goto(htmlUrl);
+      await page.waitForSelector("article.tc-card");
+      assert.equal(
+        await page.locator('button[data-action="start-workflow"][data-tc="TC-001"]').isDisabled(),
+        true,
+      );
+      assert.equal(
+        await page.locator('button[data-action="start-workflow"][data-tc="TC-002"]').isDisabled(),
+        false,
+      );
+    } finally {
+      await browser.close();
+    }
+  });
+}
+
+test("workbench workflow excludes N/A and Not Run testcases from the upload queue", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let startCount = 0;
+  let requestItems = [];
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "NA evidence", status: "na", xrayUploaded: false }),
+        testCaseFixture({
+          id: "TC-002",
+          title: "Not run evidence",
+          status: "notrun",
+          xrayUploaded: false,
+        }),
+        testCaseFixture({
+          id: "TC-003",
+          title: "Passing evidence",
+          status: "pass",
+          xrayUploaded: false,
+        }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        startCount += 1;
+        const body = JSON.parse(route.request().postData() || "{}");
+        requestItems = body.items || [];
+        await route.fulfill({
+          json: { runId: "run-skip-na", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-skip-na",
+          status: "success",
+          message: "Workflow finished.",
+          payloadSummary: { itemCount: 1, browserMode: "headless" },
+          logs: [],
+          results: [{ testcaseName: "Passing evidence", status: "success" }],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+    await page.locator(".toast", { hasText: "Workflow queue completed" }).waitFor();
+
+    assert.equal(startCount, 1);
+    assert.deepEqual(
+      requestItems.map((item) => item.testcaseName),
+      ["Passing evidence"],
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
 test("blocked test cases cannot start the Xray workflow", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();
