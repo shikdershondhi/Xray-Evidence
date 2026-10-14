@@ -166,3 +166,4 @@ The `?` hint icon beside the dark mode button opens a popup containing the lates
 - `clear evidence files` removes screenshot files from browser storage only for uploaded Xray TCs in the active workspace. TC details, status, Actual Result, bug report fields, and the uploaded checkbox stay saved.
 - Clipboard permissions depend on browser behavior. Chrome or Edge is recommended.
 - Evidence data stays local unless you manually share the exported JSON.
+- **Upload Pass only** (Settings -> Xray Workflow, saved per workspace, off by default): when on, Fail test cases are skipped by Start Workflow and the all-evidence queue, the same way Blocked, N/A and Not Run already are. Unset test cases still upload as Pass. The setting is locked while a workflow queue is running.
