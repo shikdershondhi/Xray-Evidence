@@ -2751,3 +2751,72 @@ test("help icon opens the embedded user manual with setup guidance", async () =>
     await browser.close();
   }
 });
+
+test("blocked status can be set, persists, hides Report Bug, and filters cards", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "Login flow", status: "pass" }),
+        testCaseFixture({ id: "TC-002", title: "Upload evidence", status: "fail" }),
+        testCaseFixture({ id: "TC-003", title: "Logout flow", status: "unset" }),
+      ]),
+    );
+
+    await page.goto(htmlUrl);
+    await page.waitForSelector("article.tc-card");
+
+    // Set TC-003 to blocked; it replaces any other status.
+    await page
+      .locator('input[data-action="status"][data-status="blocked"][data-tc="TC-003"]')
+      .check();
+    let state = await readStoredState(page);
+    assert.equal(
+      state.workspaces[0].testCases.find((tc) => tc.id === "TC-003").status,
+      "blocked",
+    );
+    assert.equal(
+      await page
+        .locator('input[data-action="status"][data-status="pass"][data-tc="TC-003"]')
+        .isChecked(),
+      false,
+    );
+    // Report Bug stays Fail-only.
+    assert.equal(
+      await page.locator('button[data-action="report-bug"][data-tc="TC-003"]').count(),
+      0,
+    );
+
+    // Switching TC-002 from fail to blocked removes its Report Bug button.
+    await page
+      .locator('input[data-action="status"][data-status="blocked"][data-tc="TC-002"]')
+      .check();
+    assert.equal(
+      await page.locator('button[data-action="report-bug"][data-tc="TC-002"]').count(),
+      0,
+    );
+
+    // Filter.
+    await page.locator("#evidenceFilterBtn").click();
+    await page.locator('#evidenceFilterMenu input[value="blocked"]').check();
+    assert.equal(await page.locator("article.tc-card").count(), 2);
+    assert.equal(await page.locator("#tcFilterCount").textContent(), "2 / 3 TCs");
+    assert.equal(await page.locator("#evidenceFilterLabel").textContent(), "Blocked");
+
+    // Unchecking reverts to unset (existing behavior for pass/fail).
+    await page.locator("#clearFiltersBtn").click();
+    await page
+      .locator('input[data-action="status"][data-status="blocked"][data-tc="TC-003"]')
+      .uncheck();
+    state = await readStoredState(page);
+    assert.equal(
+      state.workspaces[0].testCases.find((tc) => tc.id === "TC-003").status,
+      "unset",
+    );
+  } finally {
+    await browser.close();
+  }
+});
