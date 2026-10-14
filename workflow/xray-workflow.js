@@ -151,6 +151,15 @@ function normalizeWorkflowStatus(value) {
   return "pass";
 }
 
+// Returns the display label when a local status must not be uploaded, else "".
+function localSkipLabel(status, passOnly) {
+  if (Object.hasOwn(SKIPPED_LOCAL_STATUS_LABELS, status)) {
+    return SKIPPED_LOCAL_STATUS_LABELS[status];
+  }
+  if (passOnly === true && status === "fail") return "Fail (Pass-only upload is on)";
+  return "";
+}
+
 function normalizeBrowserMode(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return normalized === "headed" ? "headed" : "headless";
@@ -239,8 +248,9 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
   for (const [index, item] of payload.items.entries()) {
     throwIfWorkflowCancelled(options.signal);
     const itemStatus = normalizeWorkflowStatus(item.status);
-    if (Object.hasOwn(SKIPPED_LOCAL_STATUS_LABELS, itemStatus)) {
-      const message = `Skipped because local status is ${SKIPPED_LOCAL_STATUS_LABELS[itemStatus]}.`;
+    const skipLabel = localSkipLabel(itemStatus, payload.passOnly);
+    if (skipLabel) {
+      const message = `Skipped because local status is ${skipLabel}.`;
       notifyLog(notify, "warn", item.testcaseName, message);
       const skippedResult = {
         testcaseName: item.testcaseName,
@@ -1454,6 +1464,7 @@ module.exports = {
   getXrayRowExecutionStatus,
   getXrayRowExecutionStatusFromText,
   isPointerInterceptionError,
+  localSkipLabel,
   normalizeBrowserMode,
   normalizeForMatch,
   normalizeWorkflowStatus,

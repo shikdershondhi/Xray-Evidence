@@ -8,6 +8,7 @@ const {
   clickActualResultSaveButton,
   getXrayRowExecutionStatusFromText,
   isPointerInterceptionError,
+  localSkipLabel,
   normalizeBrowserMode,
   normalizeWorkflowStatus,
   openTestExecution,
@@ -776,4 +777,30 @@ test("falls back to DOM click when rich media overlay intercepts Save", async ()
   } finally {
     await browser.close();
   }
+});
+
+test("localSkipLabel skips Fail only when passOnly is on", () => {
+  assert.equal(localSkipLabel("pass", true), "");
+  assert.equal(localSkipLabel("fail", false), "");
+  assert.equal(localSkipLabel("fail", true), "Fail (Pass-only upload is on)");
+  assert.equal(localSkipLabel("blocked", false), "Blocked");
+  assert.equal(localSkipLabel("na", true), "N/A");
+  assert.equal(localSkipLabel("notrun", false), "Not Run");
+});
+
+test("validateWorkflowPayload only enables passOnly for boolean true", () => {
+  const base = {
+    testExecutionSummary: "NS-15838 Test Execution",
+    items: [
+      {
+        testcaseName: "Login flow",
+        status: "fail",
+        evidencePngDataUrl: "data:image/png;base64,AAAA",
+      },
+    ],
+  };
+  assert.equal(validateWorkflowPayload({ ...base }).passOnly, false);
+  assert.equal(validateWorkflowPayload({ ...base, passOnly: "true" }).passOnly, false);
+  assert.equal(validateWorkflowPayload({ ...base, passOnly: 1 }).passOnly, false);
+  assert.equal(validateWorkflowPayload({ ...base, passOnly: true }).passOnly, true);
 });

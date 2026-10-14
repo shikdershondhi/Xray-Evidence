@@ -3080,3 +3080,235 @@ test("blocked test cases cannot start the Xray workflow", async () => {
     await browser.close();
   }
 });
+
+test("Upload Pass only setting persists and disables Start Workflow for Fail cases", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "Failing flow", status: "fail" }),
+        testCaseFixture({ id: "TC-002", title: "Passing flow", status: "pass" }),
+      ]),
+    );
+    await stubWorkflowService(page);
+
+    await page.goto(htmlUrl);
+    await page.waitForSelector("article.tc-card");
+    const startFail = page.locator('button[data-action="start-workflow"][data-tc="TC-001"]');
+    assert.equal(await startFail.isDisabled(), false, "default off: Fail can start");
+
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.locator("#workflowPassOnlySetting").check();
+    await page.locator("#saveWorkflowSettingsBtn").click();
+
+    assert.equal(await startFail.isDisabled(), true);
+    assert.equal(
+      await page
+        .locator('button[data-action="start-workflow"][data-tc="TC-002"]')
+        .isDisabled(),
+      false,
+    );
+    const stored = await readStoredState(page);
+    assert.equal(stored.workspaces[0].workflow.passOnly, true);
+
+    await page.reload();
+    await page.waitForSelector("article.tc-card");
+    assert.equal(await startFail.isDisabled(), true, "survives reload");
+  } finally {
+    await browser.close();
+  }
+});
+
+test("Upload Pass only excludes Fail cases from the workspace queue and sends passOnly", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let requestBody = null;
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "Failing flow", status: "fail", xrayUploaded: false }),
+        testCaseFixture({ id: "TC-002", title: "Passing flow", status: "pass", xrayUploaded: false }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        requestBody = JSON.parse(route.request().postData() || "{}");
+        await route.fulfill({
+          json: { runId: "run-pass-only", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-pass-only",
+          status: "success",
+          message: "Workflow finished.",
+          payloadSummary: { itemCount: 1, browserMode: "headless" },
+          logs: [],
+          results: [{ testcaseName: "Passing flow", status: "success" }],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.locator("#workflowPassOnlySetting").check();
+    await page.locator("#saveWorkflowSettingsBtn").click();
+    await page.locator("#settingsDrawerCloseBtn").click();
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+    await page.locator(".toast", { hasText: "Workflow queue completed" }).waitFor();
+
+    assert.deepEqual(
+      requestBody.items.map((item) => item.testcaseName),
+      ["Passing flow"],
+    );
+    assert.equal(requestBody.passOnly, true);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("Upload Pass only setting is locked while a workflow queue is running", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "Passing flow", status: "pass", xrayUploaded: false }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        await route.fulfill({
+          json: { runId: "run-lock", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-lock",
+          status: "running",
+          message: "Running.",
+          payloadSummary: { itemCount: 1, browserMode: "headless" },
+          logs: [],
+          results: [],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+    await page.locator("#settingsDrawerOpenBtn").click();
+    await page.waitForFunction(
+      () => document.querySelector("#workflowPassOnlySetting")?.disabled === true,
+    );
+    assert.equal(await page.locator("#saveWorkflowSettingsBtn").isDisabled(), true);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("workflow payload keeps the starting workspace's passOnly when another workspace is selected mid-start", async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  let requestBody = null;
+  let holdHealth = false;
+  let releaseHealth;
+  const healthGate = new Promise((resolve) => {
+    releaseHealth = resolve;
+  });
+
+  try {
+    const seeded = workspaceWithUploadedCases([
+      testCaseFixture({ id: "TC-001", title: "Failing flow", status: "fail", xrayUploaded: false }),
+      testCaseFixture({ id: "TC-002", title: "Passing flow", status: "pass", xrayUploaded: false }),
+    ]);
+    seeded.workspaces.push({
+      id: "ws-2",
+      name: "Pass Only Workspace",
+      sourceName: "other.md",
+      sourceType: "markdown",
+      createdAt: "2026-05-19T00:00:00.000Z",
+      updatedAt: "2026-05-19T00:00:00.000Z",
+      workflow: {
+        testExecutionSummary: "NS-2 Test Execution",
+        browserMode: "headless",
+        passOnly: true,
+        savedAt: "2026-05-19T00:00:00.000Z",
+      },
+      testCases: [],
+    });
+    await seedWorkspace(page, seeded);
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        if (holdHealth) await healthGate;
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        requestBody = JSON.parse(route.request().postData() || "{}");
+        await route.fulfill({
+          json: { runId: "run-race", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          runId: "run-race",
+          status: "success",
+          message: "Workflow finished.",
+          payloadSummary: { itemCount: 2, browserMode: "headless" },
+          logs: [],
+          results: [],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.waitForSelector("article.tc-card");
+    holdHealth = true;
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+    await page.locator(".project-item", { hasText: "Pass Only Workspace" }).click();
+    holdHealth = false;
+    const startRequest = page.waitForEvent("requestfinished", {
+      predicate: (request) => request.url().endsWith("/workflow/start"),
+    });
+    releaseHealth();
+    await startRequest;
+
+    assert.equal(requestBody.passOnly, false);
+    assert.deepEqual(
+      requestBody.items.map((item) => item.testcaseName),
+      ["Failing flow", "Passing flow"],
+    );
+  } finally {
+    await browser.close();
+  }
+});
