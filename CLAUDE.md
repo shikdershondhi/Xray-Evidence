@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A local-first browser tool for building Jira Xray evidence packages from Markdown/CSV test case files, plus an optional Node/Playwright automation layer that uploads that evidence into Xray directly. Everything runs on the user's machine; no screenshots or evidence are uploaded to any third party except when the user explicitly runs the Xray automation or Gist sync.
 
 There are two separate deliverables in this repo — don't conflate them:
-- `xray-md-evidence.html` — the actual tool. A single self-contained HTML file (~5800 lines) with all CSS/JS inline in one `<script>` block starting around line 1955. It must stay a fully self-contained file that can be shared and opened standalone (see README "Share only the tool"), so avoid introducing external script/CSS dependencies or a build step.
+- `xray-md-evidence.html` — the actual tool. A single self-contained HTML file (~7000 lines) with all CSS/JS inline in one `<script>` block (lines ~2450–6918; constants like `STORAGE_KEY` sit at the top of it). It must stay a fully self-contained file that can be shared and opened standalone (see README "Share only the tool"), so avoid introducing external script/CSS dependencies or a build step.
 - `index.html` — a separate static marketing/landing page, unrelated to the tool's runtime. It is the only file deployed by `.github/workflows/pages.yml` (copied verbatim into `_site/` on push to `main`).
 
 ## Commands
@@ -17,6 +17,7 @@ npm run setup             # npm install + npx playwright install chromium
 npm run doctor            # preflight check: Node version, deps, Chromium launchable, port status
 npm run evidence          # open xray-md-evidence.html directly in the OS browser (no server, no Xray automation)
 npm run evidence:workflow # start the local Node server (workflow/server.js) and open it — required for Xray automation
+npm run server            # start workflow/server.js without auto-opening a browser (evidence:workflow adds --open)
 npm run xray:login        # standalone Playwright login flow to (re)save the Jira/Xray session
 npm test                  # node --test tests/*.test.js workflow/*.test.js
 ```
@@ -35,7 +36,7 @@ node --test --test-name-pattern="<substring>" tests/xray-md-evidence.test.js
 ## Architecture
 
 **Frontend (`xray-md-evidence.html`)**
-- Single-page app, no framework, no bundler. All state lives in browser `localStorage` under the key `neustring-xray-md-evidence-builder-v1` (a JSON blob of workspaces → test cases → screenshots/notes/status). There is no backend persistence for evidence data — exporting/importing JSON and optional GitHub Gist sync are the only ways data leaves the browser.
+- Single-page app, no framework, no bundler. State lives in browser storage: `localStorage` key `neustring-xray-md-evidence-builder-v1` holds the JSON blob of workspaces → test cases → notes/status. Derived keys `…-v1-theme` and `…-v1-workflow` hold theme and workflow settings, and screenshot image data goes to IndexedDB (`…-v1-images`, store `screenshots`) — so seeding/inspecting evidence in tests may need both stores. There is no backend persistence for evidence data — exporting/importing JSON and optional GitHub Gist sync are the only ways data leaves the browser.
 - Parses Markdown or CSV test case files client-side (supports two CSV shapes: standard `Test Case ID/Summary/Steps/Preconditions/Expected Result`, and "Deal Summary" style `Action`/`Data` columns).
 - Screenshot evidence is combined into Xray-compatible clipboard images entirely in-browser (Canvas/Clipboard APIs) — `Copy TC Evidence` and `copy seperatly` are the two clipboard-image code paths and have different browser/OS support caveats; check both when touching clipboard logic.
 
