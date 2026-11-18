@@ -16,8 +16,8 @@ const {
   authStatePath,
   hasLoginChallenge,
   hasSavedJiraSession,
-  isLoginUrl,
   saveJiraSession,
+  waitForJiraAuthState,
   waitForManualLogin,
 } = require("./jira-session");
 
@@ -191,6 +191,78 @@ function notifyLog(notify, level, testcaseName, message, status = "running") {
   notify(status, message, { level, testcaseName, message });
 }
 
+// Headless Chromium has no window to type a password or 2FA code into, so login runs in
+// a temporary visible browser. waitForManualLogin saves the session once Jira confirms
+// the sign-in; the caller then restarts the headless browser with that saved session.
+async function loginInVisibleBrowser(notify, options = {}) {
+  const browser = await chromium.launch(buildChromiumLaunchOptions("headed"));
+  try {
+    const context = await browser.newContext({
+      viewport: { width: 1920, height: 1080 },
+    });
+    const page = await context.newPage();
+    await page.goto(JIRA_PROJECT_URL, { waitUntil: "domcontentloaded", timeout: 90000 });
+    await waitForManualLogin(page, notify, { signal: options.signal });
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
+// Opens Jira and returns a page that is confirmed signed in. A saved session is only
+// refreshed once Jira has shown its signed-in shell for a few seconds: Jira redirects to
+// the login page a moment after domcontentloaded, and saving before then used to overwrite
+// a good session with an unauthenticated one.
+async function openJiraSignedIn(page, browserMode, notify, options = {}) {
+  const deps = {
+    closeSharedBrowser,
+    getSharedPage,
+    loginInVisibleBrowser,
+    saveJiraSession,
+    ...options.deps,
+  };
+  const { signal, authOptions } = options;
+  const openJira = (target) =>
+    target.goto(JIRA_PROJECT_URL, { waitUntil: "domcontentloaded", timeout: 90000 });
+
+  await openJira(page);
+  let state = await waitForJiraAuthState(page, { ...authOptions, signal });
+  if (state === "authenticated") {
+    await deps.saveJiraSession(page.context());
+    return page;
+  }
+  if (state === "unknown") {
+    throw new Error(
+      `Could not confirm that Jira is signed in (the page stayed on ${page.url()}). Check the network/VPN and start the workflow again.`,
+    );
+  }
+
+  let activePage = page;
+  if (normalizeBrowserMode(browserMode) === "headless") {
+    notifyLog(
+      notify,
+      "warn",
+      "",
+      "Jira login is required. Opening a visible browser window for login; the run continues in headless mode afterwards.",
+      "waiting_for_login",
+    );
+    await deps.loginInVisibleBrowser(notify, { signal });
+    await deps.closeSharedBrowser();
+    activePage = await deps.getSharedPage(browserMode);
+  } else {
+    await waitForManualLogin(page, notify, { signal, save: deps.saveJiraSession });
+  }
+
+  notifyLog(notify, "info", "", "Login complete. Reopening Jira with the saved session.");
+  await openJira(activePage);
+  state = await waitForJiraAuthState(activePage, { ...authOptions, signal });
+  if (state !== "authenticated") {
+    throw new Error(
+      `Jira login finished but Jira did not open signed in (current page ${activePage.url()}). Start the workflow again.`,
+    );
+  }
+  return activePage;
+}
+
 function getXrayRowExecutionStatusFromText(text) {
   const normalized = normalizeForMatch(text);
   if (/\bpassed\b/.test(normalized)) return "passed";
@@ -222,30 +294,17 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
     })),
   });
   notifyLog(notify, "info", "", `Reusing shared Playwright session in ${browserMode} mode.`);
-  const { context } = await getSharedBrowserContext(browserMode);
-  const page = await getSharedPage(browserMode);
+  let page = await getSharedPage(browserMode);
   const results = [];
+  const runOptions = { signal: options.signal, browserMode };
 
   throwIfWorkflowCancelled(options.signal);
   notifyLog(notify, "info", "", "Opening Jira.");
-  await page.goto(JIRA_PROJECT_URL, {
-    waitUntil: "domcontentloaded",
-    timeout: 90000,
-  });
-
-  if (isLoginUrl(page.url()) || (await hasLoginChallenge(page))) {
-    await waitForManualLogin(page, notify);
-    await page.goto(JIRA_PROJECT_URL, {
-      waitUntil: "domcontentloaded",
-      timeout: 90000,
-    });
-  } else {
-    await saveJiraSession(context);
-  }
+  page = await openJiraSignedIn(page, browserMode, notify, { signal: options.signal });
 
   notifyLog(notify, "info", "", "Opening Xray Testing Board from the sidebar (Apps > Xray > Testing Board).");
   await openXrayTestingBoard(page);
-  await prepareXrayTestExecutionsList(page, notify);
+  await prepareXrayTestExecutionsList(page, notify, runOptions);
   // Remember the executions-list URL the sidebar led to so later testcases can return
   // here without redoing the sidebar walk. It is discovered at run time, never hardcoded.
   const xrayBoardUrl = page.url();
@@ -275,7 +334,7 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
       if (index > 0) {
         currentStep = "Returning to Jira Xray test executions";
         notifyLog(notify, "info", item.testcaseName, "Returning to Jira Xray test executions.");
-        await returnToXrayTestExecutions(page, xrayBoardUrl, notify);
+        await returnToXrayTestExecutions(page, xrayBoardUrl, notify, runOptions);
         await openTestExecution(page, payload.testExecutionSummary);
       }
       const localStatus = normalizeWorkflowStatus(item.status);
@@ -410,22 +469,23 @@ async function openXrayTestingBoard(page, options = {}) {
 // Goes back to the Xray test-executions list after a testcase. Fast path reloads the
 // board URL the sidebar produced at the start of the run; if that does not load, it
 // falls back to walking the sidebar again.
-async function returnToXrayTestExecutions(page, boardUrl, notify) {
+async function returnToXrayTestExecutions(page, boardUrl, notify, options = {}) {
   try {
     await page.goto(boardUrl, { waitUntil: "domcontentloaded", timeout: 90000 });
     // The board URL differs from the testcase-detail URL only by its hash, so the goto
     // above is a same-document fragment navigation that never re-triggers the app's
     // board data fetch. Force a real reload so the app reinitializes on the list route.
     await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
-    await prepareXrayTestExecutionsList(page, notify, { timeoutMs: 45000 });
+    await prepareXrayTestExecutionsList(page, notify, { ...options, timeoutMs: 45000 });
   } catch (error) {
+    if (error?.code === "XRAY_WORKFLOW_CANCELLED") throw error;
     logDebug("returning via saved board URL failed; using sidebar", {
       boardUrl,
       error: error.message,
     });
     await page.goto(JIRA_PROJECT_URL, { waitUntil: "domcontentloaded", timeout: 90000 });
     await openXrayTestingBoard(page);
-    await prepareXrayTestExecutionsList(page, notify);
+    await prepareXrayTestExecutionsList(page, notify, options);
   }
 }
 
@@ -444,16 +504,31 @@ async function ensureXrayTestExecutionsList(page, options = {}) {
   while (!/page=/i.test(page.url()) && Date.now() < settleDeadline) {
     await page.waitForTimeout(250);
   }
-  if (!isTestExecutionBoardUrl(page.url())) return;
+  // Xray restores whatever page was last open: an execution board, or the testcase details
+  // page (#page=test-run) that a previous run ended on. Only the list has the search table.
+  if (!/page=/i.test(page.url()) || isTestExecutionsListUrl(page.url())) return;
 
-  logDebug("Xray reopened an execution board; returning to the list", {
+  logDebug("Xray reopened a page other than the executions list; returning to the list", {
     pageUrl: page.url(),
   });
-  const xray = await resolveXrayScope(page);
-  const breadcrumb = xray.getByRole("link", { name: /^Test Executions$/ }).first();
-  if (!(await breadcrumb.isVisible({ timeout: 5000 }).catch(() => false))) {
+  // Live Xray (Forge) leaves its frame empty for several seconds and shows the breadcrumb
+  // ~16s after the board opens, and the content frame can change while it loads. Poll,
+  // re-resolving the frame each time, instead of checking once (isVisible ignores timeouts).
+  const breadcrumbTimeoutMs = Math.max(500, Number(options.breadcrumbTimeoutMs) || 45000);
+  const breadcrumbDeadline = Date.now() + breadcrumbTimeoutMs;
+  let breadcrumb = null;
+  while (Date.now() < breadcrumbDeadline) {
+    const xray = await resolveXrayScope(page);
+    const candidate = xray.getByRole("link", { name: /^Test Executions$/ }).first();
+    if (await candidate.isVisible().catch(() => false)) {
+      breadcrumb = candidate;
+      break;
+    }
+    await page.waitForTimeout(500);
+  }
+  if (!breadcrumb) {
     throw new Error(
-      `Xray opened an execution board and the Test Executions breadcrumb was not found to return to the list. Current URL: ${page.url()}`,
+      `Xray opened an execution board and the Test Executions breadcrumb was not found to return to the list after ${Math.round(breadcrumbTimeoutMs / 1000)}s. Current URL: ${page.url()}`,
     );
   }
   await breadcrumb.click();
@@ -468,8 +543,9 @@ async function ensureXrayTestExecutionsList(page, options = {}) {
   );
 }
 
+// Leave any restored non-list page first (the board and testcase details pages are not the
+// list and the details page has nothing for "app ready" to wait on), then wait for the list.
 async function prepareXrayTestExecutionsList(page, notify, options = {}) {
-  await waitForXrayAppReady(page, notify, options);
   await ensureXrayTestExecutionsList(page);
   await waitForXrayAppReady(page, notify, options);
 }
@@ -627,7 +703,7 @@ async function openTestcaseExecution(page, testcaseName, notify = () => {}) {
   }
 
   if (await clickFarRightRowAction(page, row, testcaseName)) {
-    await waitForTestcaseExecutionDetails(page, testcaseName);
+    await waitForTestcaseExecutionDetails(page, testcaseName, notify);
     await afterTestcaseOpenDryRun();
     return { status: "opened", rowStatus };
   }
@@ -640,7 +716,7 @@ async function openTestcaseExecution(page, testcaseName, notify = () => {}) {
       page.waitForLoadState("domcontentloaded").catch(() => {}),
       scopedPlay.click(),
     ]);
-    await waitForTestcaseExecutionDetails(page, testcaseName);
+    await waitForTestcaseExecutionDetails(page, testcaseName, notify);
     await afterTestcaseOpenDryRun();
     return { status: "opened", rowStatus };
   }
@@ -651,7 +727,7 @@ async function openTestcaseExecution(page, testcaseName, notify = () => {}) {
       page.waitForLoadState("domcontentloaded").catch(() => {}),
       fallback.click(),
     ]);
-    await waitForTestcaseExecutionDetails(page, testcaseName);
+    await waitForTestcaseExecutionDetails(page, testcaseName, notify);
     await afterTestcaseOpenDryRun();
     return { status: "opened", rowStatus };
   }
@@ -664,7 +740,7 @@ async function openTestcaseExecution(page, testcaseName, notify = () => {}) {
       page.waitForLoadState("domcontentloaded").catch(() => {}),
       genericPlay.click(),
     ]);
-    await waitForTestcaseExecutionDetails(page, testcaseName);
+    await waitForTestcaseExecutionDetails(page, testcaseName, notify);
     await afterTestcaseOpenDryRun();
     return { status: "opened", rowStatus };
   }
@@ -684,7 +760,7 @@ async function openTestcaseExecution(page, testcaseName, notify = () => {}) {
       button.click(),
     ]);
     await page.waitForTimeout(1500);
-    await waitForTestcaseExecutionDetails(page, testcaseName);
+    await waitForTestcaseExecutionDetails(page, testcaseName, notify);
     await afterTestcaseOpenDryRun();
     return { status: "opened", rowStatus };
   }
@@ -698,7 +774,7 @@ async function afterTestcaseOpenDryRun() {
   }
 }
 
-async function clickFarRightRowAction(page, row, testcaseName) {
+async function collectVisibleRowActions(row) {
   const buttons = row.locator("button, [role='button']");
   const buttonCount = await buttons.count();
   const visible = [];
@@ -716,6 +792,19 @@ async function clickFarRightRowAction(page, row, testcaseName) {
       ariaLabel: await button.getAttribute("aria-label").catch(() => ""),
       title: await button.getAttribute("title").catch(() => ""),
     });
+  }
+  return visible;
+}
+
+// Row actions render a moment after the row is selected; do not conclude "no actions"
+// from a single snapshot taken right after the click.
+async function clickFarRightRowAction(page, row, testcaseName, options = {}) {
+  const waitMs = Number(options.actionWaitMs ?? 8000);
+  const deadline = Date.now() + waitMs;
+  let visible = await collectVisibleRowActions(row);
+  while (!visible.length && Date.now() < deadline) {
+    await page.waitForTimeout(400);
+    visible = await collectVisibleRowActions(row);
   }
 
   if (!visible.length) return false;
@@ -738,24 +827,50 @@ async function clickFarRightRowAction(page, row, testcaseName) {
   return true;
 }
 
-async function waitForTestcaseExecutionDetails(page, testcaseName) {
-  const deadline = Date.now() + 30000;
+async function waitForTestcaseExecutionDetails(
+  page,
+  testcaseName,
+  notify = () => {},
+  options = {},
+) {
+  const timeoutMs = Number(options.timeoutMs) || 60000;
+  const progressEveryMs = Number(options.progressEveryMs) || 10000;
+  const startedAt = Date.now();
+  const deadline = startedAt + timeoutMs;
+  let nextProgressAt = startedAt + progressEveryMs;
+
   while (Date.now() < deadline) {
     const xray = await resolveXrayScope(page);
     const actualResult = await firstVisibleLocator(xray, ACTUAL_RESULT_TARGETS, 800);
     if (actualResult) {
       logDebug("testcase execution details loaded", {
         testcaseName,
+        waitedMs: Date.now() - startedAt,
         pageUrl: page.url(),
         scopeUrl: typeof xray.url === "function" ? xray.url() : page.url(),
       });
       return;
     }
+    if (Date.now() >= nextProgressAt) {
+      const waited = Math.round((Date.now() - startedAt) / 1000);
+      notifyLog(
+        notify,
+        "info",
+        testcaseName,
+        `Still waiting for testcase details to load (${waited}s).`,
+      );
+      nextProgressAt = Date.now() + progressEveryMs;
+    }
     await page.waitForTimeout(700);
   }
 
+  logDebug("testcase execution details wait timed out", {
+    testcaseName,
+    pageUrl: page.url(),
+    frameUrls: page.frames().map((frame) => frame.url().slice(0, 160)),
+  });
   throw new Error(
-    `Timed out waiting for testcase execution details after clicking "${testcaseName}".`,
+    `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for testcase execution details after clicking "${testcaseName}". Current URL: ${page.url()}`,
   );
 }
 
@@ -831,7 +946,7 @@ function searchQueriesForText(text) {
 async function findUniqueRowByText(page, expectedText, label) {
   const normalizedExpected = normalizeForMatch(expectedText);
   const expectedTokens = wordTokensForMatch(expectedText);
-  await page.waitForSelector("body", { timeout: 30000 });
+  await page.waitForSelector("body", { state: "attached", timeout: 30000 });
   const rows = page.locator('[role="row"], tr, .draggable-block-list-item');
   const count = await rows.count();
   const matches = [];
@@ -1487,12 +1602,7 @@ async function firstVisibleLocator(page, selectors, timeoutMs) {
   return null;
 }
 
-async function resolveXrayScope(page) {
-  await page.waitForLoadState("domcontentloaded").catch(() => {});
-  await page.waitForTimeout(1500);
-
-  // Forge-hosted Xray renders inside *.atlassian-dev.net frames. Jira also loads empty
-  // helper frames from the same host, so prefer the candidate that actually has content.
+async function findXrayFrameWithContent(page) {
   const candidates = page
     .frames()
     .filter((item) => item !== page.mainFrame() && XRAY_FRAME_URL_PATTERN.test(item.url()));
@@ -1500,10 +1610,30 @@ async function resolveXrayScope(page) {
     const hasContent = await candidate
       .evaluate(() => Boolean(document.body && document.body.innerText.trim()))
       .catch(() => false);
-    if (hasContent) return candidate;
+    if (hasContent) return { candidates, frame: candidate };
   }
-  if (candidates.length) {
-    return candidates[0];
+  return { candidates, frame: null };
+}
+
+async function resolveXrayScope(page, options = {}) {
+  await page.waitForLoadState("domcontentloaded").catch(() => {});
+  await page.waitForTimeout(1500);
+
+  // Forge-hosted Xray renders inside *.atlassian-dev.net frames. Jira also loads empty
+  // helper frames from the same host, so prefer the candidate that actually has content.
+  // Right after a route change every frame is still empty for several seconds (live: the
+  // real one fills at ~4s), so wait for content rather than locking onto candidates[0],
+  // a helper frame that stays empty forever.
+  const contentTimeoutMs = Number(options.contentTimeoutMs ?? 20000);
+  const contentDeadline = Date.now() + contentTimeoutMs;
+  let found = await findXrayFrameWithContent(page);
+  while (!found.frame && found.candidates.length && Date.now() < contentDeadline) {
+    await page.waitForTimeout(500);
+    found = await findXrayFrameWithContent(page);
+  }
+  if (found.frame) return found.frame;
+  if (found.candidates.length) {
+    return found.candidates[0];
   }
 
   const iframe = page
@@ -1522,7 +1652,12 @@ async function waitForXrayAppReady(page, notify, options = {}) {
 
   while (Date.now() < deadline) {
     if (await hasLoginChallenge(page)) {
-      await waitForManualLogin(page, notify);
+      if (normalizeBrowserMode(options.browserMode) === "headless") {
+        throw new Error(
+          "The Jira session expired during the run and headless mode cannot show a login page. Start the workflow again; a visible browser window will open for login.",
+        );
+      }
+      await waitForManualLogin(page, notify, { signal: options.signal });
       await page.goto(JIRA_PROJECT_URL, {
         waitUntil: "domcontentloaded",
         timeout: 90000,
@@ -1592,13 +1727,16 @@ module.exports = {
   getXrayRowExecutionStatusFromText,
   isPointerInterceptionError,
   localSkipLabel,
+  loginInVisibleBrowser,
   normalizeBrowserMode,
   normalizeForMatch,
   normalizeWorkflowStatus,
   openTestExecution,
   ensureXrayTestExecutionsList,
+  openJiraSignedIn,
   openTestcaseExecution,
   openXrayTestingBoard,
+  prepareXrayTestExecutionsList,
   requireExecutionStatus,
   resolveXrayScope,
   runXrayWorkflow,

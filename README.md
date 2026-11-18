@@ -95,7 +95,7 @@ The local server API is internal to this repo. Its port, routes, and payloads ca
 2. Use the local page that opens in Chrome or Edge.
 3. In a TC card's `Xray Workflow` panel, enter the exact Xray test execution summary and choose Headless or Headed.
 4. Use `Start Workflow` in that TC card, or `Start Workflow for All Evidence` in the workbench header for every TC with screenshots.
-5. If Atlassian asks for login or 2FA, complete it in the Playwright browser within 3 minutes. The session is saved locally for later runs.
+5. If Atlassian asks for login or 2FA, complete it in the Playwright browser within 5 minutes. The workflow waits for you, saves the session once Jira loads signed in, and continues automatically. In headless mode a visible browser window opens just for login, then the run continues headless. The session is saved locally for later runs.
 
 Workflow matching uses the testcase title/name visible in the evidence card. The local `TC-001` label is not sent to Xray and is not used for matching.
 

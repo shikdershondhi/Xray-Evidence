@@ -1355,6 +1355,151 @@ test("workbench workflow panel shows all-evidence queue progress and logs", asyn
   }
 });
 
+test("workflow log viewer filters, copies errors, downloads the full log and keeps its scroll", async () => {
+  const browser = await chromium.launch();
+  const context = await browser.newContext({ acceptDownloads: true });
+  const page = await context.newPage();
+  let logCount = 40;
+  let getCount = 0;
+
+  const makeLogs = (count) =>
+    Array.from({ length: count }, (_, index) => ({
+      time: `2026-05-19T00:${String(Math.floor(index / 60)).padStart(2, "0")}:${String(index % 60).padStart(2, "0")}.000Z`,
+      level: index === 7 || index === 19 ? "error" : index % 5 === 0 ? "warn" : "info",
+      testcaseName: "First evidence",
+      message: `Step ${index}`,
+    }));
+
+  try {
+    await seedWorkspace(
+      page,
+      workspaceWithUploadedCases([
+        testCaseFixture({ id: "TC-001", title: "First evidence" }),
+        testCaseFixture({ id: "TC-002", title: "Second evidence" }),
+      ]),
+    );
+    await page.addInitScript(() => {
+      window.confirm = () => true;
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text) => {
+            window.__copied = text;
+          },
+        },
+      });
+    });
+    await page.route("http://127.0.0.1:39291/**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/health") {
+        await route.fulfill({ json: { status: "ready" } });
+        return;
+      }
+      if (url.pathname === "/workflow/start") {
+        await route.fulfill({
+          json: { runId: "run-log", status: "queued", message: "Workflow queued." },
+        });
+        return;
+      }
+      getCount += 1;
+      await route.fulfill({
+        json: {
+          runId: "run-log",
+          status: "running",
+          message: "Uploading evidence in Playwright.",
+          payloadSummary: { itemCount: 1, browserMode: "headless" },
+          logs: makeLogs(logCount),
+          results: [],
+        },
+      });
+    });
+
+    await page.goto(htmlUrl);
+    await page.locator("#startWorkspaceWorkflowBtn").click();
+
+    const panel = page.locator("#workspaceWorkflowPanel");
+    const body = panel.locator(".wf-log-body");
+    await body.waitFor();
+    await page.waitForFunction(
+      () => document.querySelectorAll("#workspaceWorkflowPanel .wf-log-line").length === 40,
+    );
+
+    // Chronological order: oldest first, newest last, and every entry is shown.
+    const lines = await panel.locator(".wf-log-line").allInnerTexts();
+    assert.match(lines[0], /Step 0/);
+    assert.match(lines[39], /Step 39/);
+    assert.ok(await panel.getByRole("button", { name: "Errors (2)" }).isVisible());
+    assert.ok(await panel.getByRole("button", { name: "Warnings (8)" }).isVisible());
+
+    // Copy errors copies only the error lines, in plain text.
+    await panel.getByRole("button", { name: "Copy errors" }).click();
+    const copied = await page.evaluate(() => window.__copied);
+    assert.equal(
+      copied,
+      [
+        "2026-05-19T00:00:07.000Z ERROR [First evidence] Step 7",
+        "2026-05-19T00:00:19.000Z ERROR [First evidence] Step 19",
+      ].join("\n"),
+    );
+
+    // Download log contains the header and the full log, ignoring the active filter.
+    await panel.getByRole("button", { name: "Errors (2)" }).click();
+    assert.equal(await panel.locator(".wf-log-line").count(), 2);
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      panel.getByRole("button", { name: "Download log" }).click(),
+    ]);
+    assert.match(download.suggestedFilename(), /^xray-workflow-log-.*\.txt$/);
+    const downloaded = require("node:fs").readFileSync(await download.path(), "utf8");
+    assert.match(downloaded, /^NeuString Xray Evidence - workflow log/);
+    assert.match(downloaded, /Entries: 40 \(errors: 2, warnings: 8\)/);
+    assert.match(downloaded, /INFO\s+\[First evidence\] Step 1\b/);
+    assert.match(downloaded, /ERROR \[First evidence\] Step 19/);
+    await panel.getByRole("button", { name: "All (40)" }).click();
+
+    // Polling with unchanged data must not rebuild the log or reset the reader's scroll.
+    await body.evaluate((node) => {
+      node.scrollTop = 0;
+      node.dataset.marker = "same-node";
+    });
+    const before = getCount;
+    await expectEventually(() => getCount >= before + 2, 8000);
+    assert.equal(await body.getAttribute("data-marker"), "same-node");
+    assert.equal(await body.evaluate((node) => node.scrollTop), 0);
+
+    // New lines arriving while the reader is scrolled up must not yank the view.
+    logCount = 41;
+    await page.waitForFunction(
+      () => document.querySelectorAll("#workspaceWorkflowPanel .wf-log-line").length === 41,
+    );
+    assert.equal(await body.evaluate((node) => node.scrollTop), 0);
+
+    // At the bottom, the view follows the newest line.
+    await body.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    logCount = 42;
+    await page.waitForFunction(
+      () => document.querySelectorAll("#workspaceWorkflowPanel .wf-log-line").length === 42,
+    );
+    const atBottom = await body.evaluate(
+      (node) => node.scrollHeight - node.scrollTop - node.clientHeight < 8,
+    );
+    assert.equal(atBottom, true);
+  } finally {
+    await browser.close();
+  }
+
+  async function expectEventually(predicate, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (predicate()) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.fail("condition was not met in time");
+  }
+});
+
 test("workbench workflow skips testcases already uploaded in Xray", async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage();

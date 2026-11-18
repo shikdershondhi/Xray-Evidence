@@ -707,42 +707,95 @@
         color: var(--ink);
       }
 
-      .workspace-workflow-logs {
-        max-height: 180px;
-        overflow: auto;
+      /* Workflow log viewer: one scroll container, selectable text, copy/download tools. */
+      .wf-log {
+        display: grid;
         border: 1px solid var(--line);
         border-radius: 8px;
         background: var(--panel-2);
-        padding: 5px 10px;
+        overflow: hidden;
       }
 
-      .workspace-workflow-log {
-        display: grid;
-        grid-template-columns: auto auto minmax(120px, 0.35fr) minmax(0, 1fr);
+      .wf-log-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
         gap: 8px;
-        align-items: start;
-        padding: 6px 0;
+        padding: 6px 8px;
         border-bottom: 1px solid var(--line);
-        font-size: 12px;
-        line-height: 1.35;
+        background: var(--panel);
       }
 
-      .workspace-workflow-log:last-child {
-        border-bottom: 0;
+      .wf-log-filters,
+      .wf-log-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
       }
 
-      .workspace-workflow-log-level {
+      .wf-log-chip[aria-pressed="true"] {
+        border-color: var(--blue);
+        background: var(--active-panel);
+        color: var(--ink);
+      }
+
+      .wf-log-body {
+        max-height: min(360px, 55vh);
+        min-height: 72px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        resize: vertical;
+        padding: 4px 0;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        cursor: text;
+        user-select: text;
+        -webkit-user-select: text;
+      }
+
+      .wf-log-body:focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: -2px;
+      }
+
+      .wf-log-line {
+        display: grid;
+        grid-template-columns: 76px 44px minmax(0, 1fr);
+        gap: 8px;
+        padding: 3px 10px;
+        border-left: 3px solid transparent;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+      }
+
+      .wf-log-level {
         color: var(--muted);
         font-weight: 750;
         text-transform: uppercase;
       }
 
-      .workspace-workflow-log.error {
+      .wf-log-line.warn {
+        border-left-color: var(--amber);
+        background: var(--modified-bg);
+        color: var(--modified-ink);
+      }
+
+      .wf-log-line.error {
+        border-left-color: var(--red);
+        background: var(--fail-bg);
         color: var(--fail-ink);
       }
 
-      .workspace-workflow-log.warn {
-        color: var(--notice-ink);
+      .wf-log-line.warn .wf-log-level,
+      .wf-log-line.error .wf-log-level {
+        color: inherit;
+      }
+
+      .wf-log-empty {
+        padding: 8px 10px;
+        color: var(--muted);
       }
 
       .tc-workflow-panel {
@@ -853,10 +906,8 @@
 
       .workflow-log-list {
         display: none;
-        max-height: 220px;
-        overflow: auto;
         border-top: 1px solid var(--line);
-        padding: 6px 10px 10px;
+        padding: 8px 10px 10px;
       }
 
       .workflow-run-popup.expanded .workflow-log-list {
@@ -1715,7 +1766,6 @@
         }
         .workflow-workbench-actions,
         .workspace-workflow-head,
-        .workspace-workflow-log,
         .tc-workflow-head,
         .tc-workflow-grid {
           align-items: stretch;
@@ -2045,7 +2095,7 @@
                 Open this page from the website. It talks to your local server
                 at <code>http://127.0.0.1:39291</code>. The first workflow run
                 opens a browser window where you log in to Jira manually within
-                3 minutes; the session is then reused.
+                5 minutes; the session is then reused.
               </li>
             </ol>
             <ul>
@@ -2151,7 +2201,7 @@
               <li>Run <code>npm run evidence:workflow</code> from the repo to start the local server and open this page.</li>
               <li>Open Settings and save the exact test execution summary under Xray Workflow.</li>
               <li>Click Start Workflow in one TC card, or start all TCs with evidence from the workbench header.</li>
-              <li>Complete Atlassian login and 2FA in the Playwright browser within 3 minutes if prompted.</li>
+              <li>Complete Atlassian login and 2FA in the Playwright browser within 5 minutes if prompted. In headless mode a visible browser window opens just for login, then the run continues headless.</li>
               <li>
                 The workflow matches Xray by testcase title/name. The local
                 TC-001 label is not sent to Xray.
@@ -4969,38 +5019,53 @@
           <button class="workflow-log-toggle small ghost" data-action="toggle-workflow-logs" data-tc="${tc.id}" type="button">
             ${expanded ? `Hide workflow logs (${logs.length})` : `Show workflow logs (${logs.length})`}
           </button>
-          <div class="workflow-log-list">${
-            logs.length
-              ? logs.map(renderWorkflowLogEntry).join("")
-              : `<div class="workflow-log-entry"><span class="workflow-log-time">--:--:--</span> Waiting for Playwright updates.</div>`
-          }</div>
+          <div class="workflow-log-list">${workflowLogViewerHtml(
+            `tc:${tc.id}`,
+            logs,
+            { title: `Workflow log - ${tc.title || tc.id}` },
+          )}</div>
         </div>`;
         }
 
-        function renderWorkspaceWorkflowPanel() {
+        function renderWorkspaceWorkflowPanel(options = {}) {
           if (!els.workspaceWorkflowPanel) return;
           const visible = Boolean(
             workflowState.queueActive ||
               workflowState.queueStartedAt ||
               workflowState.queueResults.length,
           );
-          els.workspaceWorkflowPanel.hidden = !visible;
+          const panel = els.workspaceWorkflowPanel;
+          panel.hidden = !visible;
+          installWorkflowLogHandlers();
           if (!visible) {
-            els.workspaceWorkflowPanel.innerHTML = "";
+            panel.innerHTML = "";
+            delete panel.dataset.renderSig;
             return;
           }
 
-          els.workspaceWorkflowPanel.innerHTML = workspaceWorkflowPanelHtml();
+          const html = workspaceWorkflowPanelHtml();
+          const sig = hashString(html);
+          // Polling re-renders constantly; replacing identical markup would reset the log
+          // scroll position, drop a text selection and swallow clicks mid-press.
+          if (!options.force && panel.dataset.renderSig === sig) return;
+          if (!options.force && logSelectionInside(panel)) {
+            workflowLogUi().deferred = true;
+            return;
+          }
+          const scroll = captureLogScroll(panel);
+          panel.innerHTML = html;
+          panel.dataset.renderSig = sig;
+          restoreLogScroll(panel, scroll);
         }
 
         function workspaceWorkflowPanelHtml() {
           const status = workspaceWorkflowStatus();
           const progress = workspaceWorkflowProgressText();
           const latestMessage = latestWorkspaceWorkflowMessage();
-          const logs = workspaceWorkflowLogs().slice(0, 12);
-          const logHtml = logs.length
-            ? logs.map(renderWorkspaceWorkflowLogEntry).join("")
-            : `<div class="workflow-log-entry"><span class="workflow-log-time">--:--:--</span> Waiting for Playwright updates.</div>`;
+          const logHtml = workflowLogViewerHtml("workspace", workspaceWorkflowLogs(), {
+            title: "Workflow log - all evidence",
+            lineClass: "workspace-workflow-log",
+          });
 
           return `<section aria-label="All evidence workflow progress">
           <div class="workspace-workflow-head">
@@ -5047,15 +5112,17 @@
           if (currentRun?.message) return currentRun.message;
 
           const logs = workspaceWorkflowLogs();
-          if (logs[0]?.message) return logs[0].message;
+          const lastLog = logs[logs.length - 1];
+          if (lastLog?.message) return lastLog.message;
           return "Waiting for Playwright updates.";
         }
 
         function workspaceWorkflowLogs() {
-          const byTimeDesc = (left, right) => {
+          // Oldest first, like a terminal: the viewer follows the newest line.
+          const byTimeAsc = (left, right) => {
             const leftTime = new Date(left.time).getTime() || 0;
             const rightTime = new Date(right.time).getTime() || 0;
-            return rightTime - leftTime;
+            return leftTime - rightTime;
           };
           const logs = [];
           const seen = new Set();
@@ -5085,20 +5152,7 @@
             addRunLogs(runState);
           });
 
-          return logs.sort(byTimeDesc);
-        }
-
-        function renderWorkspaceWorkflowLogEntry(log) {
-          const time = formatLogTime(log.time);
-          const level = ["info", "warn", "error"].includes(log.level)
-            ? log.level
-            : "info";
-          return `<div class="workspace-workflow-log ${level}">
-            <span class="workflow-log-time">${time}</span>
-            <span class="workspace-workflow-log-level">${escapeHtml(level)}</span>
-            <strong>${escapeHtml(log.testcaseName || "Workflow")}</strong>
-            <span>${escapeHtml(log.message || "")}</span>
-          </div>`;
+          return logs.sort(byTimeAsc);
         }
 
         function renderWorkflowPanels() {
@@ -5107,28 +5161,263 @@
             .forEach((panel) => renderTcWorkflowPanel(panel.dataset.workflowPanel));
         }
 
-        function renderTcWorkflowPanel(tcId) {
+        function renderTcWorkflowPanel(tcId, options = {}) {
           const tc = getTc(tcId);
           const panel = els.cards.querySelector(
             `[data-workflow-panel="${cssEscape(tcId)}"]`,
           );
           if (!tc || !panel) return;
-          panel.outerHTML = workflowPanelHtml(tc);
+          installWorkflowLogHandlers();
+          const html = workflowPanelHtml(tc);
+          const sig = hashString(html);
+          // See renderWorkspaceWorkflowPanel: skip no-op re-renders so the log keeps its
+          // scroll position, selection and focus while polling.
+          if (!options.force && panel.dataset.renderSig === sig) return;
+          if (!options.force && logSelectionInside(panel)) {
+            workflowLogUi().deferred = true;
+            return;
+          }
+          const scroll = captureLogScroll(panel);
+          panel.outerHTML = html;
           const updatedPanel = els.cards.querySelector(
             `[data-workflow-panel="${cssEscape(tcId)}"]`,
           );
-          if (updatedPanel) bindWorkflowPanelEvents(updatedPanel);
+          if (updatedPanel) {
+            updatedPanel.dataset.renderSig = sig;
+            restoreLogScroll(updatedPanel, scroll);
+            bindWorkflowPanelEvents(updatedPanel);
+          }
         }
 
-        function renderWorkflowLogEntry(log) {
-          const time = formatLogTime(log.time);
-          const level = ["info", "warn", "error"].includes(log.level)
-            ? log.level
-            : "info";
-          const testcase = log.testcaseName
-            ? `<strong>${escapeHtml(log.testcaseName)}</strong> `
-            : "";
-          return `<div class="workflow-log-entry ${level}"><span class="workflow-log-time">${time}</span> ${testcase}${escapeHtml(log.message || "")}</div>`;
+        // ---- Workflow log viewer: filter, copy errors, download full log ----
+
+        function workflowLogUi() {
+          if (!workflowState.logUi) {
+            workflowState.logUi = {
+              filters: new Map(),
+              viewers: new Map(),
+              deferred: false,
+              installed: false,
+            };
+          }
+          return workflowState.logUi;
+        }
+
+        function hashString(value) {
+          let hash = 5381;
+          for (let index = 0; index < value.length; index += 1) {
+            hash = ((hash << 5) + hash + value.charCodeAt(index)) | 0;
+          }
+          return `${hash}:${value.length}`;
+        }
+
+        function normalizeLogLevel(level) {
+          return ["info", "warn", "error"].includes(level) ? level : "info";
+        }
+
+        function workflowLogViewerHtml(viewerId, logs, options = {}) {
+          const ui = workflowLogUi();
+          const all = Array.isArray(logs) ? logs : [];
+          const warnCount = all.filter((log) => normalizeLogLevel(log.level) === "warn").length;
+          const errorCount = all.filter((log) => normalizeLogLevel(log.level) === "error").length;
+          const filter = ui.filters.get(viewerId) || "all";
+          const shown =
+            filter === "all"
+              ? all
+              : all.filter((log) => normalizeLogLevel(log.level) === filter);
+          ui.viewers.set(viewerId, {
+            logs: all,
+            title: options.title || "Workflow log",
+          });
+
+          const idAttr = escapeAttr(viewerId);
+          const chip = (value, label) =>
+            `<button type="button" class="wf-log-chip small ghost" data-wf-log-filter="${value}" data-wf-log-id="${idAttr}" aria-pressed="${filter === value}">${label}</button>`;
+          const lineClass = options.lineClass ? ` ${options.lineClass}` : "";
+          const lines = shown.length
+            ? shown
+                .map((log) => {
+                  const level = normalizeLogLevel(log.level);
+                  const testcase = log.testcaseName
+                    ? `<strong>${escapeHtml(log.testcaseName)}</strong> `
+                    : "";
+                  return `<div class="wf-log-line ${level}${lineClass}"><span class="workflow-log-time" title="${escapeAttr(log.time || "")}">${formatLogTime(log.time)}</span><span class="wf-log-level">${level}</span><span>${testcase}${escapeHtml(log.message || "")}</span></div>`;
+                })
+                .join("")
+            : `<div class="wf-log-empty">${all.length ? "No entries match this filter." : "Waiting for Playwright updates."}</div>`;
+
+          return `<div class="wf-log">
+            <div class="wf-log-toolbar">
+              <div class="wf-log-filters" role="group" aria-label="Filter log entries">
+                ${chip("all", `All (${all.length})`)}
+                ${chip("warn", `Warnings (${warnCount})`)}
+                ${chip("error", `Errors (${errorCount})`)}
+              </div>
+              <div class="wf-log-actions">
+                <button type="button" class="small ghost" data-wf-log-action="copy-errors" data-wf-log-id="${idAttr}">Copy errors</button>
+                <button type="button" class="small ghost" data-wf-log-action="copy-all" data-wf-log-id="${idAttr}">Copy log</button>
+                <button type="button" class="small ghost" data-wf-log-action="download" data-wf-log-id="${idAttr}">Download log</button>
+              </div>
+            </div>
+            <div class="wf-log-body" role="log" aria-live="off" aria-label="${escapeAttr(options.title || "Workflow log")}" tabindex="0" data-wf-log-body="${idAttr}">${lines}</div>
+          </div>`;
+        }
+
+        function workflowLogLineText(log) {
+          const level = normalizeLogLevel(log.level).toUpperCase().padEnd(5);
+          const testcase = log.testcaseName ? ` [${log.testcaseName}]` : "";
+          return `${log.time || ""} ${level}${testcase} ${log.message || ""}`.trimEnd();
+        }
+
+        function workflowLogDownloadText(viewer) {
+          const logs = viewer.logs;
+          const errors = logs.filter((log) => normalizeLogLevel(log.level) === "error").length;
+          const warnings = logs.filter((log) => normalizeLogLevel(log.level) === "warn").length;
+          return [
+            "NeuString Xray Evidence - workflow log",
+            `Generated: ${nowIso()}`,
+            `Scope: ${viewer.title}`,
+            `Test execution: ${workflowState.summary || "(not set)"}`,
+            `Browser mode: ${workflowState.browserMode}`,
+            `Entries: ${logs.length} (errors: ${errors}, warnings: ${warnings})`,
+            "-".repeat(72),
+            ...logs.map(workflowLogLineText),
+            "",
+          ].join("\n");
+        }
+
+        async function copyWorkflowLogText(text) {
+          try {
+            await copyTextToClipboard(text);
+            return;
+          } catch {
+            // Fall back to a hidden textarea when the async clipboard API is unavailable.
+          }
+          const area = document.createElement("textarea");
+          area.value = text;
+          area.setAttribute("readonly", "");
+          area.style.position = "fixed";
+          area.style.opacity = "0";
+          document.body.appendChild(area);
+          area.select();
+          const copied = document.execCommand("copy");
+          area.remove();
+          if (!copied) {
+            throw new Error("Could not copy the log. Use Download log instead.");
+          }
+        }
+
+        function rerenderWorkflowLogViewer(viewerId) {
+          if (viewerId.startsWith("tc:")) {
+            renderTcWorkflowPanel(viewerId.slice(3), { force: true });
+          } else {
+            renderWorkspaceWorkflowPanel({ force: true });
+          }
+        }
+
+        async function handleWorkflowLogClick(event) {
+          const target =
+            event.target instanceof Element
+              ? event.target.closest("[data-wf-log-action], [data-wf-log-filter]")
+              : null;
+          if (!target) return;
+          const ui = workflowLogUi();
+          const viewerId = target.dataset.wfLogId || "";
+
+          if (target.dataset.wfLogFilter) {
+            ui.filters.set(viewerId, target.dataset.wfLogFilter);
+            rerenderWorkflowLogViewer(viewerId);
+            return;
+          }
+
+          const viewer = ui.viewers.get(viewerId);
+          if (!viewer) return;
+          const action = target.dataset.wfLogAction;
+          try {
+            if (action === "copy-errors") {
+              const errors = viewer.logs.filter(
+                (log) => normalizeLogLevel(log.level) === "error",
+              );
+              if (!errors.length) {
+                toast("No errors in the log.");
+                return;
+              }
+              await copyWorkflowLogText(errors.map(workflowLogLineText).join("\n"));
+              toast(`Copied ${errors.length} error${errors.length === 1 ? "" : "s"}.`);
+            } else if (action === "copy-all") {
+              if (!viewer.logs.length) {
+                toast("The log is empty.");
+                return;
+              }
+              await copyWorkflowLogText(viewer.logs.map(workflowLogLineText).join("\n"));
+              toast(`Copied ${viewer.logs.length} log entries.`);
+            } else if (action === "download") {
+              if (!viewer.logs.length) {
+                toast("The log is empty.");
+                return;
+              }
+              const stamp = nowIso().replace(/[:.]/g, "-");
+              downloadText(
+                `${safeFileName(`xray-workflow-log-${stamp}`)}.txt`,
+                workflowLogDownloadText(viewer),
+                "text/plain;charset=utf-8",
+              );
+            }
+          } catch (error) {
+            showError(error);
+          }
+        }
+
+        function installWorkflowLogHandlers() {
+          const ui = workflowLogUi();
+          if (ui.installed) return;
+          ui.installed = true;
+          document.addEventListener("click", (event) => {
+            handleWorkflowLogClick(event);
+          });
+          // Re-render panels that were held back while the user was selecting log text.
+          document.addEventListener("selectionchange", () => {
+            if (!ui.deferred || logSelectionInside(document.body)) return;
+            ui.deferred = false;
+            renderWorkflowPanels();
+            renderWorkspaceWorkflowPanel();
+          });
+        }
+
+        function logSelectionInside(root) {
+          const selection = window.getSelection?.();
+          if (!selection || selection.isCollapsed || !selection.rangeCount) return false;
+          const node = selection.anchorNode;
+          const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+          return Boolean(
+            element && root.contains(element) && element.closest("[data-wf-log-body]"),
+          );
+        }
+
+        function captureLogScroll(root) {
+          const snapshot = new Map();
+          root.querySelectorAll("[data-wf-log-body]").forEach((body) => {
+            snapshot.set(body.dataset.wfLogBody, {
+              top: body.scrollTop,
+              height: body.style.height,
+              atBottom: body.scrollHeight - body.scrollTop - body.clientHeight < 8,
+            });
+          });
+          return snapshot;
+        }
+
+        // Keep following the newest line when the reader was at the bottom; otherwise stay
+        // exactly where they scrolled to.
+        function restoreLogScroll(root, snapshot) {
+          root.querySelectorAll("[data-wf-log-body]").forEach((body) => {
+            const previous = snapshot.get(body.dataset.wfLogBody);
+            if (previous?.height) body.style.height = previous.height;
+            if (!previous || previous.atBottom) {
+              body.scrollTop = body.scrollHeight;
+            } else {
+              body.scrollTop = previous.top;
+            }
+          });
         }
 
         function formatLogTime(value) {
