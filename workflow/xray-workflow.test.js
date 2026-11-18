@@ -15,6 +15,7 @@ const {
   openTestcaseExecution,
   ensureXrayTestExecutionsList,
   openXrayTestingBoard,
+  prepareXrayTestExecutionsList,
   requireExecutionStatus,
   resolveXrayScope,
   shouldSkipExecutedRow,
@@ -937,6 +938,64 @@ test("returns to the test executions list when Xray restores the last execution 
   }
 });
 
+test("returns to the test executions list when Xray restores a testcase details page", async () => {
+  // A finished run leaves Xray on #page=test-run (the testcase details page); the next
+  // run's sidebar visit restores it, and only the list route has the search table.
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await openFakeXrayRoute(page, "#page=test-run&testExecutionKey=NS-1&testKey=NS-2");
+
+    await ensureXrayTestExecutionsList(page, { timeoutMs: 3000 });
+
+    assert.match(page.url(), /#page=test-executions$/);
+    assert.equal(await page.evaluate(() => window.crumbClicks), 1);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("prepareXrayTestExecutionsList leaves a restored testcase details page before waiting for the list", async () => {
+  // The details page has no search box or rows, so waiting for "list loaded" first would
+  // spin for 3 minutes and never reach the breadcrumb that leads back to the list.
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await page.route("https://jira.test/**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `
+          <a href="#" id="crumb">Test Executions</a>
+          <input id="search" placeholder="Search" hidden />
+          <script>
+            const sync = () => {
+              document.getElementById("search").hidden = !location.hash.includes("page=test-executions");
+            };
+            window.addEventListener("hashchange", sync);
+            sync();
+            document.getElementById("crumb").addEventListener("click", (event) => {
+              event.preventDefault();
+              location.hash = "page=test-executions";
+            });
+          </script>`,
+      }),
+    );
+    await page.goto(
+      "https://jira.test/jira/apps/a/b/testing-board#page=test-run&testExecutionKey=NS-1&testKey=NS-2",
+    );
+
+    await prepareXrayTestExecutionsList(page, () => {}, { timeoutMs: 8000 });
+
+    assert.match(page.url(), /#page=test-executions$/);
+  } finally {
+    await browser.close();
+  }
+});
+
 test("leaves the test executions list alone when it is already showing", async () => {
   const { chromium } = require("@playwright/test");
   const browser = await chromium.launch({ headless: true });
@@ -964,9 +1023,51 @@ test("reports a clear error when the Test Executions breadcrumb is missing", asy
     });
 
     await assert.rejects(
-      () => ensureXrayTestExecutionsList(page, { timeoutMs: 800 }),
+      () => ensureXrayTestExecutionsList(page, { timeoutMs: 800, breadcrumbTimeoutMs: 800 }),
       /Test Executions breadcrumb/,
     );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("waits for a slow-rendering Test Executions breadcrumb instead of giving up after 5s", async () => {
+  // Live Xray (Forge) keeps its frame empty for ~8s and only shows the breadcrumb ~16s
+  // after the board opens, so a fixed 5s visibility check reported "not found".
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await page.route("https://jira.test/**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `
+          <input placeholder="Search" />
+          <script>
+            window.crumbClicks = 0;
+            setTimeout(() => {
+              const crumb = document.createElement("a");
+              crumb.href = "#";
+              crumb.textContent = "Test Executions";
+              crumb.addEventListener("click", (event) => {
+                event.preventDefault();
+                window.crumbClicks += 1;
+                window.location.hash = "page=test-executions";
+              });
+              document.body.appendChild(crumb);
+            }, 10000);
+          </script>`,
+      }),
+    );
+    await page.goto(
+      "https://jira.test/jira/apps/a/b/testing-board#page=test-execution-board&testExecutionId=7",
+    );
+
+    await ensureXrayTestExecutionsList(page, { timeoutMs: 5000, breadcrumbTimeoutMs: 25000 });
+
+    assert.match(page.url(), /#page=test-executions$/);
+    assert.equal(await page.evaluate(() => window.crumbClicks), 1);
   } finally {
     await browser.close();
   }
@@ -996,6 +1097,45 @@ test("resolveXrayScope picks the Forge iframe that has content over an empty hel
     await page.waitForLoadState("load");
 
     const scope = await resolveXrayScope(page);
+
+    assert.equal(scope.url(), "https://app.atlassian-dev.net/xray");
+  } finally {
+    await browser.close();
+  }
+});
+
+test("resolveXrayScope waits for the Xray frame to render instead of locking onto an empty helper frame", async () => {
+  // Live Xray: right after the route changes both Forge frames are empty for a few
+  // seconds. Falling back to the first (permanently empty) one made every later
+  // waitForSelector("body") hang for 30s, so the testcase details page "was not found".
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await page.route("https://jira.test/**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `
+          <iframe src="https://helper.atlassian-dev.net/blank"></iframe>
+          <iframe src="https://app.atlassian-dev.net/xray"></iframe>`,
+      }),
+    );
+    await page.route("https://helper.atlassian-dev.net/**", (route) =>
+      route.fulfill({ contentType: "text/html", body: "<body></body>" }),
+    );
+    await page.route("https://app.atlassian-dev.net/**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `<body><script>
+          setTimeout(() => { document.body.textContent = "Test Executions"; }, 3000);
+        </script></body>`,
+      }),
+    );
+    await page.goto("https://jira.test/jira/software/projects/NS/summary");
+    await page.waitForLoadState("load");
+
+    const scope = await resolveXrayScope(page, { contentTimeoutMs: 15000 });
 
     assert.equal(scope.url(), "https://app.atlassian-dev.net/xray");
   } finally {

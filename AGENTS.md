@@ -37,7 +37,7 @@ npm test                  # node --test tests/*.test.js workflow/*.test.js
 - Runs execute one at a time through a FIFO queue against a single shared Playwright browser/context/page (`getSharedBrowserContext`/`getSharedPage`) — concurrent Jira logins invalidate the shared session, so do not relaunch per run or parallelize runs. Cancellation is cooperative via `AbortController` + `throwIfWorkflowCancelled` checkpoints; it never closes the shared browser.
 - `xray-workflow.js` matches test cases by **title/name text tokens visible in the evidence card**, never by the local `TC-001` label (which isn't sent to Xray). See `wordTokensForMatch`/`tokensContainExactSequence`.
 - `selectors.js` centralizes brittle Jira/Xray DOM selectors, the Jira project entry URL (`JIRA_PROJECT_URL`, project `NS` on `yaanainc.atlassian.net`) and the sidebar labels used to reach the Testing Board (Apps > Xray > Testing Board). No Xray URL is hardcoded; the app route's UUIDs change when Xray is migrated. Xray's Forge UI renders in an `*.atlassian-dev.net` iframe. First place to look when Xray UI changes break automation.
-- `jira-session.js` persists Playwright storageState at `.xray-auth/jira-xray-auth-state.json` (gitignored — treat as a credential). Login/2FA gets a 3-minute manual window (`MANUAL_LOGIN_TIMEOUT_MS`).
+- `jira-session.js` persists Playwright storageState at `.xray-auth/jira-xray-auth-state.json` (gitignored — treat as a credential). Login/2FA gets a 5-minute manual window (`MANUAL_LOGIN_TIMEOUT_MS`); the session is saved only after `waitForJiraAuthState` sees the Jira shell stay up (Jira redirects to login ~2s after domcontentloaded).
 - Debug trail goes to gitignored `workflow/workflow-debug.log` via `logDebug`.
 
 ## Conventions
