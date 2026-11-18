@@ -13,7 +13,10 @@ const {
   normalizeWorkflowStatus,
   openTestExecution,
   openTestcaseExecution,
+  ensureXrayTestExecutionsList,
+  openXrayTestingBoard,
   requireExecutionStatus,
+  resolveXrayScope,
   shouldSkipExecutedRow,
 } = require("./xray-workflow");
 const {
@@ -803,4 +806,199 @@ test("validateWorkflowPayload only enables passOnly for boolean true", () => {
   assert.equal(validateWorkflowPayload({ ...base, passOnly: "true" }).passOnly, false);
   assert.equal(validateWorkflowPayload({ ...base, passOnly: 1 }).passOnly, false);
   assert.equal(validateWorkflowPayload({ ...base, passOnly: true }).passOnly, true);
+});
+
+// Fake Jira served from memory (no network): a sidebar with Apps > Xray > Testing Board.
+function fakeJiraSidebarHtml({ appsExpanded = false, withTestingBoard = true } = {}) {
+  return `
+    <nav>
+      <button id="apps" aria-expanded="${appsExpanded}">Apps</button>
+      <button aria-label="More actions for Apps">...</button>
+      <div id="appsMenu" ${appsExpanded ? "" : "hidden"}>
+        <button id="xray" aria-expanded="false">Xray</button>
+        <div id="xrayMenu" hidden>
+          ${
+            withTestingBoard
+              ? '<a href="/jira/software/projects/NS/apps/app-uuid/env-uuid/testing-board">Testing Board</a>'
+              : '<a href="/jira/apps/other">Getting Started</a>'
+          }
+        </div>
+      </div>
+    </nav>
+    <script>
+      const toggle = (button, menu) => button.addEventListener("click", () => {
+        const open = button.getAttribute("aria-expanded") === "true";
+        button.setAttribute("aria-expanded", String(!open));
+        menu.hidden = open;
+      });
+      toggle(document.getElementById("apps"), document.getElementById("appsMenu"));
+      toggle(document.getElementById("xray"), document.getElementById("xrayMenu"));
+    </script>`;
+}
+
+async function openFakeJira(page, sidebarOptions) {
+  await page.route("https://jira.test/**", (route) => {
+    const { pathname } = new URL(route.request().url());
+    return route.fulfill({
+      contentType: "text/html",
+      body: /\/testing-board$/.test(pathname)
+        ? "<h1>Xray board</h1>"
+        : fakeJiraSidebarHtml(sidebarOptions),
+    });
+  });
+  await page.goto("https://jira.test/jira/software/projects/NS/summary");
+}
+
+test("opens the Xray Testing Board through the Jira sidebar without a hardcoded URL", async () => {
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await openFakeJira(page);
+    const boardUrl = await openXrayTestingBoard(page, { timeoutMs: 3000 });
+
+    assert.match(page.url(), /\/apps\/app-uuid\/env-uuid\/testing-board$/);
+    assert.equal(boardUrl, page.url());
+  } finally {
+    await browser.close();
+  }
+});
+
+test("sidebar navigation does not collapse sections that are already expanded", async () => {
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await openFakeJira(page, { appsExpanded: true });
+    await openXrayTestingBoard(page, { timeoutMs: 3000 });
+
+    assert.match(page.url(), /\/testing-board$/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("sidebar navigation reports a clear error when Testing Board is missing under Xray", async () => {
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await openFakeJira(page, { withTestingBoard: false });
+
+    await assert.rejects(
+      () => openXrayTestingBoard(page, { timeoutMs: 600 }),
+      /"Testing Board" was not found under Apps > Xray/,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+// Fake Xray app page: the URL hash tells which Xray route is showing; the "Test
+// Executions" breadcrumb switches the route back to the list.
+async function openFakeXrayRoute(page, hash, { withBreadcrumb = true } = {}) {
+  await page.route("https://jira.test/**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `
+        <input placeholder="Search" />
+        ${withBreadcrumb ? '<a href="#" id="crumb">Test Executions</a>' : ""}
+        <script>
+          window.crumbClicks = 0;
+          const crumb = document.getElementById("crumb");
+          if (crumb) crumb.addEventListener("click", (event) => {
+            event.preventDefault();
+            window.crumbClicks += 1;
+            window.location.hash = "page=test-executions";
+          });
+        </script>`,
+    }),
+  );
+  await page.goto(`https://jira.test/jira/apps/a/b/testing-board${hash}`);
+}
+
+test("returns to the test executions list when Xray restores the last execution board", async () => {
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await openFakeXrayRoute(page, "#page=test-execution-board&testExecutionId=73367");
+
+    await ensureXrayTestExecutionsList(page, { timeoutMs: 3000 });
+
+    assert.match(page.url(), /#page=test-executions$/);
+    assert.equal(await page.evaluate(() => window.crumbClicks), 1);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("leaves the test executions list alone when it is already showing", async () => {
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await openFakeXrayRoute(page, "#page=test-executions");
+
+    await ensureXrayTestExecutionsList(page, { timeoutMs: 3000 });
+
+    assert.equal(await page.evaluate(() => window.crumbClicks), 0);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("reports a clear error when the Test Executions breadcrumb is missing", async () => {
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await openFakeXrayRoute(page, "#page=test-execution-board&testExecutionId=1", {
+      withBreadcrumb: false,
+    });
+
+    await assert.rejects(
+      () => ensureXrayTestExecutionsList(page, { timeoutMs: 800 }),
+      /Test Executions breadcrumb/,
+    );
+  } finally {
+    await browser.close();
+  }
+});
+
+test("resolveXrayScope picks the Forge iframe that has content over an empty helper frame", async () => {
+  const { chromium } = require("@playwright/test");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    await page.route("https://jira.test/**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `
+          <iframe src="https://helper.atlassian-dev.net/blank"></iframe>
+          <iframe src="https://app.atlassian-dev.net/xray"></iframe>`,
+      }),
+    );
+    await page.route("https://helper.atlassian-dev.net/**", (route) =>
+      route.fulfill({ contentType: "text/html", body: "<body></body>" }),
+    );
+    await page.route("https://app.atlassian-dev.net/**", (route) =>
+      route.fulfill({ contentType: "text/html", body: "<body>Test Executions</body>" }),
+    );
+    await page.goto("https://jira.test/jira/software/projects/NS/summary");
+    await page.waitForLoadState("load");
+
+    const scope = await resolveXrayScope(page);
+
+    assert.equal(scope.url(), "https://app.atlassian-dev.net/xray");
+  } finally {
+    await browser.close();
+  }
 });

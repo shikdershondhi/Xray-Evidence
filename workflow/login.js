@@ -1,5 +1,5 @@
 const { chromium } = require("@playwright/test");
-const { XRAY_TEST_EXECUTIONS_URL } = require("./selectors");
+const { JIRA_PROJECT_URL } = require("./selectors");
 const { saveJiraSession, waitForManualLogin } = require("./jira-session");
 
 (async () => {
@@ -13,7 +13,7 @@ const { saveJiraSession, waitForManualLogin } = require("./jira-session");
   const page = await context.newPage();
 
   try {
-    await page.goto(XRAY_TEST_EXECUTIONS_URL, {
+    await page.goto(JIRA_PROJECT_URL, {
       waitUntil: "domcontentloaded",
       timeout: 90000,
     });
