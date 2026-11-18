@@ -5,9 +5,12 @@ const {
   ACTUAL_RESULT_TARGETS,
   PLAY_BUTTON_FALLBACK_SELECTOR,
   SAVE_TARGETS,
+  JIRA_PROJECT_URL,
   SEARCH_INPUT_SELECTORS,
   TEST_EXECUTION_LINK_FALLBACK_SELECTOR,
-  XRAY_TEST_EXECUTIONS_URL,
+  XRAY_BOARD_PATH_PATTERN,
+  XRAY_FRAME_URL_PATTERN,
+  XRAY_SIDEBAR_NAMES,
 } = require("./selectors");
 const {
   authStatePath,
@@ -224,15 +227,15 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
   const results = [];
 
   throwIfWorkflowCancelled(options.signal);
-  notifyLog(notify, "info", "", "Opening Jira Xray test executions.");
-  await page.goto(XRAY_TEST_EXECUTIONS_URL, {
+  notifyLog(notify, "info", "", "Opening Jira.");
+  await page.goto(JIRA_PROJECT_URL, {
     waitUntil: "domcontentloaded",
     timeout: 90000,
   });
 
   if (isLoginUrl(page.url()) || (await hasLoginChallenge(page))) {
     await waitForManualLogin(page, notify);
-    await page.goto(XRAY_TEST_EXECUTIONS_URL, {
+    await page.goto(JIRA_PROJECT_URL, {
       waitUntil: "domcontentloaded",
       timeout: 90000,
     });
@@ -240,7 +243,12 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
     await saveJiraSession(context);
   }
 
-  await waitForXrayAppReady(page, notify);
+  notifyLog(notify, "info", "", "Opening Xray Testing Board from the sidebar (Apps > Xray > Testing Board).");
+  await openXrayTestingBoard(page);
+  await prepareXrayTestExecutionsList(page, notify);
+  // Remember the executions-list URL the sidebar led to so later testcases can return
+  // here without redoing the sidebar walk. It is discovered at run time, never hardcoded.
+  const xrayBoardUrl = page.url();
   throwIfWorkflowCancelled(options.signal);
   notifyLog(notify, "info", "", `Searching execution "${payload.testExecutionSummary}".`);
   await openTestExecution(page, payload.testExecutionSummary);
@@ -267,16 +275,7 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
       if (index > 0) {
         currentStep = "Returning to Jira Xray test executions";
         notifyLog(notify, "info", item.testcaseName, "Returning to Jira Xray test executions.");
-        await page.goto(XRAY_TEST_EXECUTIONS_URL, {
-          waitUntil: "domcontentloaded",
-          timeout: 90000,
-        });
-        // XRAY_TEST_EXECUTIONS_URL differs from the testcase-detail URL only by its
-        // "#!page=..." hash, so the goto above is a same-document fragment navigation
-        // that never re-triggers the SPA's board data fetch. Force a real reload so the
-        // app actually reinitializes on the test-executions route.
-        await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
-        await waitForXrayAppReady(page, notify);
+        await returnToXrayTestExecutions(page, xrayBoardUrl, notify);
         await openTestExecution(page, payload.testExecutionSummary);
       }
       const localStatus = normalizeWorkflowStatus(item.status);
@@ -352,6 +351,127 @@ async function runXrayWorkflow(payload, notify = () => {}, options = {}) {
         : "All evidence uploaded to Xray.",
     results,
   };
+}
+
+async function expandSidebarSection(button, label, timeoutMs) {
+  await button.waitFor({ state: "visible", timeout: timeoutMs }).catch(() => {
+    throw new Error(
+      `Jira sidebar item "${label}" was not found. Make sure the Jira sidebar is visible and the Xray app is installed for this site.`,
+    );
+  });
+  if ((await button.getAttribute("aria-expanded")) !== "true") {
+    await button.click();
+  }
+}
+
+// Reaches the Xray Testing Board the way a person does: Jira sidebar > Apps > Xray >
+// Testing Board. Nothing about the Xray app route (app/environment UUIDs) is hardcoded,
+// so Xray reinstalls or migrations do not break navigation.
+async function openXrayTestingBoard(page, options = {}) {
+  const timeoutMs = Math.max(1000, Number(options.timeoutMs) || 30000);
+
+  const appsButton = page.getByRole("button", { name: XRAY_SIDEBAR_NAMES.apps }).first();
+  if (!(await appsButton.isVisible({ timeout: 5000 }).catch(() => false))) {
+    const expandSidebar = page
+      .getByRole("button", { name: XRAY_SIDEBAR_NAMES.expandSidebar })
+      .first();
+    if (await expandSidebar.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await expandSidebar.click();
+    }
+  }
+  await expandSidebarSection(appsButton, "Apps", timeoutMs);
+
+  const xrayButton = page.getByRole("button", { name: XRAY_SIDEBAR_NAMES.xray }).first();
+  await expandSidebarSection(xrayButton, "Xray", timeoutMs);
+
+  const testingBoardLink = page
+    .getByRole("link", { name: XRAY_SIDEBAR_NAMES.testingBoard })
+    .first();
+  await testingBoardLink.waitFor({ state: "visible", timeout: timeoutMs }).catch(() => {
+    throw new Error(
+      'Jira sidebar item "Testing Board" was not found under Apps > Xray. The Xray sidebar layout may have changed.',
+    );
+  });
+  await testingBoardLink.click();
+  await page
+    .waitForURL((url) => XRAY_BOARD_PATH_PATTERN.test(url.pathname), {
+      timeout: timeoutMs,
+      waitUntil: "commit",
+    })
+    .catch(() => {
+      throw new Error(
+        `Clicking Testing Board in the Jira sidebar did not open the Xray board. Current URL: ${page.url()}`,
+      );
+    });
+  logDebug("opened Xray testing board from sidebar", { pageUrl: page.url() });
+  return page.url();
+}
+
+// Goes back to the Xray test-executions list after a testcase. Fast path reloads the
+// board URL the sidebar produced at the start of the run; if that does not load, it
+// falls back to walking the sidebar again.
+async function returnToXrayTestExecutions(page, boardUrl, notify) {
+  try {
+    await page.goto(boardUrl, { waitUntil: "domcontentloaded", timeout: 90000 });
+    // The board URL differs from the testcase-detail URL only by its hash, so the goto
+    // above is a same-document fragment navigation that never re-triggers the app's
+    // board data fetch. Force a real reload so the app reinitializes on the list route.
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 90000 });
+    await prepareXrayTestExecutionsList(page, notify, { timeoutMs: 45000 });
+  } catch (error) {
+    logDebug("returning via saved board URL failed; using sidebar", {
+      boardUrl,
+      error: error.message,
+    });
+    await page.goto(JIRA_PROJECT_URL, { waitUntil: "domcontentloaded", timeout: 90000 });
+    await openXrayTestingBoard(page);
+    await prepareXrayTestExecutionsList(page, notify);
+  }
+}
+
+function isTestExecutionsListUrl(url) {
+  return /(?:[#!?&]|^)page=test-executions(?:[&]|$)/i.test(String(url || ""));
+}
+
+// Xray reopens the last page you viewed, so the sidebar's Testing Board link can land on
+// a previous execution instead of the executions list. When that happens, go back with
+// the app's own "Test Executions" breadcrumb rather than assuming a hardcoded route.
+async function ensureXrayTestExecutionsList(page, options = {}) {
+  const timeoutMs = Math.max(500, Number(options.timeoutMs) || 15000);
+
+  // Let the app settle on a route; its hash is written shortly after the page loads.
+  const settleDeadline = Date.now() + Math.min(timeoutMs, 8000);
+  while (!/page=/i.test(page.url()) && Date.now() < settleDeadline) {
+    await page.waitForTimeout(250);
+  }
+  if (!isTestExecutionBoardUrl(page.url())) return;
+
+  logDebug("Xray reopened an execution board; returning to the list", {
+    pageUrl: page.url(),
+  });
+  const xray = await resolveXrayScope(page);
+  const breadcrumb = xray.getByRole("link", { name: /^Test Executions$/ }).first();
+  if (!(await breadcrumb.isVisible({ timeout: 5000 }).catch(() => false))) {
+    throw new Error(
+      `Xray opened an execution board and the Test Executions breadcrumb was not found to return to the list. Current URL: ${page.url()}`,
+    );
+  }
+  await breadcrumb.click();
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (isTestExecutionsListUrl(page.url())) return;
+    await page.waitForTimeout(250);
+  }
+  throw new Error(
+    `Clicking the Test Executions breadcrumb did not show the executions list. Current URL: ${page.url()}`,
+  );
+}
+
+async function prepareXrayTestExecutionsList(page, notify, options = {}) {
+  await waitForXrayAppReady(page, notify, options);
+  await ensureXrayTestExecutionsList(page);
+  await waitForXrayAppReady(page, notify, options);
 }
 
 async function openTestExecution(page, summary, options = {}) {
@@ -1371,18 +1491,24 @@ async function resolveXrayScope(page) {
   await page.waitForLoadState("domcontentloaded").catch(() => {});
   await page.waitForTimeout(1500);
 
-  const frame = page
+  // Forge-hosted Xray renders inside *.atlassian-dev.net frames. Jira also loads empty
+  // helper frames from the same host, so prefer the candidate that actually has content.
+  const candidates = page
     .frames()
-    .find((item) =>
-      /xray|xpandit|testing-board|atlassian-connect|jira/i.test(item.url()),
-    );
-  if (frame && frame !== page.mainFrame()) {
-    return frame;
+    .filter((item) => item !== page.mainFrame() && XRAY_FRAME_URL_PATTERN.test(item.url()));
+  for (const candidate of candidates) {
+    const hasContent = await candidate
+      .evaluate(() => Boolean(document.body && document.body.innerText.trim()))
+      .catch(() => false);
+    if (hasContent) return candidate;
+  }
+  if (candidates.length) {
+    return candidates[0];
   }
 
   const iframe = page
     .locator(
-      'iframe[src*="xray" i], iframe[src*="xpandit" i], iframe[src*="atlassian-connect" i], iframe[title*="Xray" i]',
+      'iframe[src*="atlassian-dev" i], iframe[src*="xray" i], iframe[src*="xpandit" i], iframe[src*="atlassian-connect" i], iframe[title*="Xray" i]',
     )
     .first();
   const iframeElement = await iframe.elementHandle({ timeout: 5000 }).catch(() => null);
@@ -1390,17 +1516,18 @@ async function resolveXrayScope(page) {
   return contentFrame || page;
 }
 
-async function waitForXrayAppReady(page, notify) {
-  const deadline = Date.now() + 3 * 60 * 1000;
+async function waitForXrayAppReady(page, notify, options = {}) {
+  const deadline = Date.now() + (Number(options.timeoutMs) || 3 * 60 * 1000);
   notify("running", "Waiting for Xray test executions to load.");
 
   while (Date.now() < deadline) {
     if (await hasLoginChallenge(page)) {
       await waitForManualLogin(page, notify);
-      await page.goto(XRAY_TEST_EXECUTIONS_URL, {
+      await page.goto(JIRA_PROJECT_URL, {
         waitUntil: "domcontentloaded",
         timeout: 90000,
       });
+      await openXrayTestingBoard(page);
     }
 
     const xray = await resolveXrayScope(page);
@@ -1469,7 +1596,9 @@ module.exports = {
   normalizeForMatch,
   normalizeWorkflowStatus,
   openTestExecution,
+  ensureXrayTestExecutionsList,
   openTestcaseExecution,
+  openXrayTestingBoard,
   requireExecutionStatus,
   resolveXrayScope,
   runXrayWorkflow,
